@@ -1,0 +1,142 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profiles",
+      "description": "User account information and saved game settings synchronized across devices",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "email": { "type": "string", "description": "User email address" },
+        "photoURL": { "type": "string", "description": "User profile avatar photo URL" },
+        "lastLogin": { "type": "string", "description": "ISO timestamp of last login" },
+        "eloRating": { "type": "number", "description": "Chess / Board game Elo rating" },
+        "totalWins": { "type": "number", "description": "Total matches won" },
+        "totalGames": { "type": "number", "description": "Total matches played" },
+        "coins": { "type": "number", "description": "Player coin balance" },
+        "gems": { "type": "number", "description": "Player gem balance" },
+        "winStreak": { "type": "number", "description": "Current consecutive win streak" },
+        "lastDailyClaim": { "type": "string", "description": "ISO timestamp of last daily login claim" },
+        "createdAt": { "type": "string", "description": "ISO creation timestamp" }
+      },
+      "required": ["uid", "email"]
+    },
+    "coinHistory": {
+      "title": "Coin Transaction Ledger",
+      "description": "Immutable log of all user coin transactions, match rewards, deductions, and streak bonuses",
+      "type": "object",
+      "properties": {
+        "txId": { "type": "string", "description": "Unique transaction ID" },
+        "userId": { "type": "string", "description": "User UID" },
+        "amount": { "type": "number", "description": "Coin amount change (+/-)" },
+        "type": { "type": "string", "description": "Transaction category (match_win, match_loss, match_entry, daily_spin, daily_login, quest_reward, referral, ad_reward)" },
+        "description": { "type": "string", "description": "Human readable summary" },
+        "gameId": { "type": "string", "description": "Associated game identifier" },
+        "balanceAfter": { "type": "number", "description": "Wallet balance after transaction" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" },
+        "metadata": { "type": "object", "description": "Contextual metadata (streak, opponent, etc.)" }
+      },
+      "required": ["txId", "userId", "amount", "type", "balanceAfter", "createdAt"]
+    },
+    "userData": {
+      "title": "User Game Data Backup",
+      "description": "Cloud backup of all locally saved games, match logs, custom boards, and preferences",
+      "type": "object",
+      "properties": {
+        "updatedAt": { "type": "string", "description": "ISO timestamp of update" },
+        "gameData": { "type": "object", "description": "Key-value pair game states and settings" }
+      },
+      "required": ["updatedAt", "gameData"]
+    },
+    "rooms": {
+      "title": "Multiplayer Game Rooms",
+      "description": "Cloud synchronized game lobby rooms and multiplayer boards",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string", "description": "Unique room identifier" },
+        "ownerId": { "type": "string", "description": "UID of room creator" },
+        "ownerUsername": { "type": "string", "description": "Display name of creator" },
+        "isPrivate": { "type": "boolean", "description": "Whether room is private or public" },
+        "communityNotice": { "type": "string", "description": "Room custom notice message" },
+        "roomRules": { "type": "object", "description": "Room configuration rules" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" },
+        "status": { "type": "string", "description": "Room status: waiting, playing, finished" }
+      },
+      "required": ["roomId", "ownerId", "ownerUsername", "createdAt", "status"]
+    },
+    "leaderboard": {
+      "title": "Leaderboard Records",
+      "description": "Global player rankings, scores, and tournament standings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User UID" },
+        "username": { "type": "string", "description": "Player username" },
+        "elo": { "type": "number", "description": "Elo rating" },
+        "score": { "type": "number", "description": "High score or tournament score" },
+        "gameMode": { "type": "string", "description": "Game type" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp" }
+      },
+      "required": ["userId", "username", "score", "gameMode"]
+    },
+    "systemGovernance": {
+      "title": "System Governance & Emergency Mode",
+      "description": "Global application operational state, panic mode shutdown, and emergency maintenance controls",
+      "type": "object",
+      "properties": {
+        "panicModeActive": { "type": "boolean", "description": "Whether emergency lockdown is active" },
+        "reason": { "type": "string", "description": "Lockdown or maintenance explanation" },
+        "initiatedBy": { "type": "string", "description": "Identity of administrator who engaged panic mode" },
+        "lockedAt": { "type": "string", "description": "Server timestamp of lockdown initiation" },
+        "unlockAt": { "type": "string", "description": "ISO timestamp string when lockdown expires automatically" },
+        "durationMinutes": { "type": "number", "description": "Configured lockdown duration in minutes" },
+        "terminatedAt": { "type": "string", "description": "Server timestamp of manual lockdown termination" },
+        "terminatedBy": { "type": "string", "description": "Identity of administrator who terminated lockdown" }
+      },
+      "required": ["panicModeActive"]
+    },
+    "platformState": {
+      "title": "Platform State & Active Game",
+      "description": "Global active game mode configuration and platform state synchronized across all clients",
+      "type": "object",
+      "properties": {
+        "activeGameId": { "type": "string", "description": "Identifier of currently active game mode" },
+        "gameTitle": { "type": "string", "description": "Display title of active game" },
+        "entryFee": { "type": "number", "description": "Configured entry fee amount" },
+        "currency": { "type": "string", "description": "Currency used for entry fee (coins or gems)" },
+        "switchedBy": { "type": "string", "description": "Admin who switched the game mode" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp or server timestamp" }
+      },
+      "required": ["activeGameId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "User profile documents accessible and modifiable by the profile owner"
+    },
+    "/users/{userId}/coin_history/{txId}": {
+      "schema": "coinHistory",
+      "description": "Immutable audit ledger of user coin awards, match rewards, and transaction records"
+    },
+    "/user_data/{userId}": {
+      "schema": "userData",
+      "description": "User cloud save backups accessible and modifiable only by the account owner"
+    },
+    "/rooms/{roomId}": {
+      "schema": "rooms",
+      "description": "Public and private game lobbies readable by all authenticated players, writable by owner"
+    },
+    "/leaderboard/{entryId}": {
+      "schema": "leaderboard",
+      "description": "Public leaderboard data readable by all players, modifiable by authenticated players"
+    },
+    "/system/{docId}": {
+      "schema": "systemGovernance",
+      "description": "System-wide governance documents including emergency panic mode status"
+    },
+    "/platform_state/{docId}": {
+      "schema": "platformState",
+      "description": "Global active game mode and platform state readable by all users, writable only by administrators"
+    }
+  }
+}

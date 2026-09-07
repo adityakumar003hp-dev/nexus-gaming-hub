@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSignedIn() {
+      return isAuthenticated();
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Role verification for administrators and site owner
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'SITE OWNER' ||
+        request.auth.token.role == 'ADMIN' ||
+        request.auth.token.email == 'mukkuc41@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SITE OWNER'))
+      );
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Platform State & Emergency Lockdown
+    // Allows any session to read lockdown status, and permits update for panic lockdown & dynamic economy
+    match /platform_state/lockdown {
+      allow read, write: if true;
+    }
+
+    // Allows all connected players to receive and sync real-time platform updates
+    match /platform_state/{stateDoc} {
+      allow read, write: if true;
+    }
+
+    // System governance & emergency mode lockdown
+    match /system/{docId} {
+      allow read, write: if true;
+    }
+
+    // User cloud game data backup
+    match /user_data/{userId} {
+      allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      // Users can read their own profile; Admins can read all profiles; authenticated users can read profiles for lobby/standings
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || true);
+      // Governance fields restricted to Admins/Site Owner; standard authenticated users can register and update profile
+      allow create: if isAuthenticated() && isOwner(userId) &&
+        (!('role' in request.resource.data) || request.resource.data.role == 'USER') &&
+        (!('isBanned' in request.resource.data) || request.resource.data.isBanned == false) &&
+        (!('isMuted' in request.resource.data) || request.resource.data.isMuted == false);
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'gems', 'isBanned', 'isMuted', 'sessionRevokedAt']) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['coins']) || request.resource.data.coins <= resource.data.coins)
+      );
+      allow delete: if isAdmin();
+
+      // Immutable coin transaction audit history
+      match /coin_history/{txId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) && isValidId(txId);
+        allow update, delete: if false; // Immutable audit log
+      }
+    }
+
+    // Multiplayer game rooms
+    match /rooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(roomId);
+      allow update: if isSignedIn() && (resource.data.ownerId == request.auth.uid || request.resource.data.status != null);
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // Leaderboards & standings
+    match /leaderboard/{entryId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && isValidId(entryId);
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

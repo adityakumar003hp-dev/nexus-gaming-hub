@@ -1,0 +1,6 @@
+{
+  "name": "DUO CHESS",
+  "description": "A dark-gaming themed multi-game arena featuring DUO CHESS, real-time multiplayer, 20 classic and arcade games, competitive leaderboards, tactical puzzles, and AI coaching.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

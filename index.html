@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="google-site-verification" content="t4EUubj7UT2grBOoj7C3g3s0lI6SxnO0XLGRVPSB6WY" />
+    
+    <!-- Title Tag SEO -->
+    <title>DUO CHESS — Play. Connect. Win.</title>
+
+    <!-- Meta Description SEO -->
+    <meta name="description" content="DUO CHESS is a modern gaming platform where strategy meets fun. Play Chess and 20 exciting multiplayer games, connect with players, and climb the global leaderboard." />
+    <meta name="keywords" content="duo chess, chess online, multiplayer chess, carrom, ludo, draughts, board games, gaming arena" />
+    <meta name="author" content="Aditya (Owner)" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Canonical URL SEO -->
+    <link rel="canonical" href="https://duochess.ai.studio.com" />
+
+    <!-- Open Graph Tags SEO -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://duochess.ai.studio.com" />
+    <meta property="og:title" content="DUO CHESS — Play. Connect. Win." />
+    <meta property="og:description" content="DUO CHESS is a modern gaming platform where strategy meets fun. Play Chess and 20 exciting multiplayer games, connect with players, and climb the global leaderboard." />
+    <meta property="og:image" content="https://duochess.ai.studio/og-image.png" />
+    <meta property="og:site_name" content="DUO CHESS" />
+
+    <!-- Twitter Card Tags SEO -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://duochess.ai.studio.com" />
+    <meta name="twitter:title" content="DUO CHESS — Play. Connect. Win." />
+    <meta name="twitter:description" content="DUO CHESS is a modern gaming platform where strategy meets fun. Play Chess and 20 exciting multiplayer games, connect with players, and climb the global leaderboard." />
+    <meta name="twitter:image" content="https://duochess.ai.studio/og-image.png" />
+
+    <!-- Favicon SEO (Gold Crown SVG) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>♟️</text></svg>" />
+
+    <!-- JSON-LD Structured Data for Search Engine & AI Indexing -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "DUO CHESS",
+      "alternateName": "Duo Chess Arena",
+      "url": "https://duochess.ai.studio.com",
+      "applicationCategory": "GameApplication",
+      "operatingSystem": "All",
+      "genre": "Strategy, Chess, Arcade, Tycoon, Multiplayer",
+      "description": "DUO CHESS is a modern gaming platform featuring multiplayer chess, 20 classic games, real-time matchmaking, and competitive leaderboards.",
+      "author": {
+        "@type": "Person",
+        "name": "Aditya",
+        "jobTitle": "Platform Creator & Site Owner"
+      },
+      "license": "https://opensource.org/licenses",
+      "provider": {
+        "@type": "Organization",
+        "name": "Google Cloud / Firebase Hosting"
+      }
+    }
+    </script>
+    <!-- Preloader Overlay CSS & Animations -->
+    <style>
+      #preloader-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: radial-gradient(circle at center, #1a1c2e 0%, #0b0f19 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1), visibility 1.2s ease;
+      }
+
+      #preloader-overlay.hidden-overlay {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .preloader-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+      }
+
+      .logo-icon-wrap {
+        position: relative;
+        width: 88px;
+        height: 88px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .logo-ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 3px solid transparent;
+        border-top-color: #f59e0b;
+        border-right-color: #8b5cf6;
+        animation: spin-ring 3.5s linear infinite;
+      }
+
+      .logo-pulse-bg {
+        position: absolute;
+        inset: -12px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(245, 158, 11, 0.25) 0%, rgba(139, 92, 246, 0.1) 70%, transparent 100%);
+        animation: pulse-glow 3.5s ease-in-out infinite;
+      }
+
+      .logo-crown-icon {
+        font-size: 3rem;
+        filter: drop-shadow(0 0 16px rgba(245, 158, 11, 0.8));
+        animation: float-crown 4s ease-in-out infinite;
+      }
+
+      .logo-text-title {
+        font-size: 2.2rem;
+        font-weight: 900;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        background: linear-gradient(135deg, #fef08a 0%, #f59e0b 50%, #c084fc 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 2px 10px rgba(245, 158, 11, 0.3));
+        animation: tracking-in 2.2s cubic-bezier(0.215, 0.61, 0.355, 1) both;
+      }
+
+      .logo-subtext {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #94a3b8;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .preloader-bar-wrap {
+        width: 240px;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 999px;
+        overflow: hidden;
+        position: relative;
+        margin-top: 8px;
+        border: 1px solid rgba(245, 158, 11, 0.2);
+      }
+
+      .preloader-bar-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #f59e0b, #c084fc, #06b6d4);
+        border-radius: 999px;
+        transition: width 0.1s linear;
+      }
+
+      .preloader-status-text {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #fde047;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-top: 4px;
+        font-family: monospace;
+      }
+
+      @keyframes spin-ring {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      @keyframes pulse-glow {
+        0%, 100% { transform: scale(0.95); opacity: 0.5; }
+        50% { transform: scale(1.15); opacity: 0.9; }
+      }
+
+      @keyframes float-crown {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
+      }
+
+      @keyframes tracking-in {
+        0% { letter-spacing: -0.2em; opacity: 0; transform: scale(0.9); }
+        100% { letter-spacing: 0.15em; opacity: 1; transform: scale(1); }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Fullscreen Chess Pro Preloader Overlay -->
+    <div id="preloader-overlay">
+      <div class="preloader-content">
+        <div class="logo-icon-wrap">
+          <div class="logo-pulse-bg"></div>
+          <div class="logo-ring"></div>
+          <div class="logo-crown-icon">♟️</div>
+        </div>
+        <div class="logo-text-title">DUO CHESS</div>
+        <div class="logo-subtext">PLAY. CONNECT. WIN.</div>
+        <div class="preloader-bar-wrap">
+          <div id="preloader-fill" class="preloader-bar-fill"></div>
+        </div>
+        <div id="preloader-status" class="preloader-status-text">Loading Arena... 0%</div>
+      </div>
+    </div>
+
+    <!-- Vanilla JS Preloader Hide Script -->
+    <script>
+      (function() {
+        const startTime = Date.now();
+        const TOTAL_LOADING_TIME_MS = 5000; // Exact 5.0 seconds splash loading animation
+
+        const fillEl = document.getElementById('preloader-fill');
+        const statusEl = document.getElementById('preloader-status');
+
+        const interval = setInterval(() => {
+          const elapsed = Date.now() - startTime;
+          const pct = Math.min(100, Math.floor((elapsed / TOTAL_LOADING_TIME_MS) * 100));
+          if (fillEl) fillEl.style.width = pct + '%';
+          if (statusEl) statusEl.textContent = 'Loading Arena... ' + pct + '%';
+
+          if (pct >= 100) {
+            clearInterval(interval);
+          }
+        }, 50);
+
+        function hidePreloader() {
+          const preloader = document.getElementById('preloader-overlay');
+          if (!preloader || preloader.classList.contains('hidden-overlay')) return;
+
+          const elapsedTime = Date.now() - startTime;
+          const remainingDelay = Math.max(0, TOTAL_LOADING_TIME_MS - elapsedTime);
+
+          setTimeout(() => {
+            preloader.classList.add('hidden-overlay');
+            setTimeout(() => {
+              if (preloader && preloader.parentNode) {
+                preloader.parentNode.removeChild(preloader);
+              }
+            }, 1250);
+          }, remainingDelay);
+        }
+
+        if (document.readyState === 'complete') {
+          hidePreloader();
+        } else {
+          window.addEventListener('load', function() {
+            hidePreloader();
+          });
+          // Fallback timer to ensure preloader hides
+          setTimeout(hidePreloader, 6000);
+        }
+
+        // Expose global helper for React to call when ready
+        window.hideChessProPreloader = hidePreloader;
+      })();
+    </script>
+
+    <!-- Instant Lockdown Persistence on Refresh -->
+    <script>
+      try {
+        if (localStorage.getItem('emergency_shutdown_active') === 'true') {
+          var s = document.createElement('style');
+          s.id = 'emergency-lockdown-persist-style';
+          s.textContent = '#emergencyLockdownOverlay { display: flex !important; z-index: 999999 !important; } body { overflow: hidden !important; }';
+          (document.head || document.documentElement).appendChild(s);
+        }
+      } catch (e) {}
+    </script>
+
+    <!-- EXACT SYSTEM LOCKDOWN OVERLAY -->
+    <div id="emergencyLockdownOverlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:#0a0a0f; z-index:999999; justify-content:center; align-items:center; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-sizing:border-box;">
+      
+      <div style="display:flex; flex-direction:column; align-items:center; text-align:center; max-width:420px; width:90%;">
+        
+        <!-- Red Alert Badge -->
+        <div style="width:52px; height:52px; background:linear-gradient(135deg, #ef4444, #991b1b); border-radius:14px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; box-shadow:0 0 25px rgba(239,68,68,0.5);">
+          <div style="width:24px; height:24px; border:2.5px solid #fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; font-size:14px;">!</div>
+        </div>
+
+        <!-- Title with Emoji -->
+        <h2 style="margin:0 0 6px 0; color:#f87171; font-size:20px; font-weight:700; letter-spacing:1px; display:flex; align-items:center; gap:8px;">
+          🚨 SYSTEM LOCKDOWN ENGAGED
+        </h2>
+
+        <p id="lockdownReasonDisplay" style="color:#64748b; font-size:11px; margin:0 0 20px 0; letter-spacing:0.3px;">
+          Admin Initiated Maintenance & Security Shutdown
+        </p>
+
+        <!-- Dynamic Countdown Display -->
+        <div style="background:#110a10; border:1px solid #851e2a; border-radius:8px; padding:8px 18px; margin-bottom:16px; display:inline-block;">
+          <span style="color:#94a3b8; font-size:11px; margin-right:8px;">Lockdown Status:</span>
+          <span id="lockdownCountdownDisplay" style="color:#fbbf24; font-family:monospace; font-size:12px; font-weight:bold;">Initializing...</span>
+        </div>
+
+        <!-- Auto-Unlock Time Pill -->
+        <div style="background:#110a10; border:1px solid #851e2a; border-radius:8px; padding:8px 18px; margin-bottom:20px; display:inline-block;">
+          <span style="color:#94a3b8; font-size:11px; margin-right:8px;">Auto-Unlock Time:</span>
+          <span id="autoUnlockTime" style="color:#fbbf24; font-family:monospace; font-size:12px; font-weight:bold;">3:46:13 PM</span>
+        </div>
+
+        <!-- Time Remaining Card -->
+        <div style="background:#0f0913; border:1px solid #1f1425; border-radius:12px; padding:16px; width:100%; box-sizing:border-box; margin-bottom:24px;">
+          <small style="color:#94a3b8; font-size:10px; display:block; margin-bottom:12px; font-weight:500;">⏱ Time Remaining Until Unlock</small>
+          
+          <!-- Countdown Blocks -->
+          <div style="display:flex; justify-content:center; gap:12px; margin-bottom:16px;">
+            <div style="background:#200a14; border:1px solid #4c0d1e; border-radius:8px; padding:10px 14px; min-width:60px;">
+              <div id="cdHours" style="color:#ef4444; font-size:22px; font-weight:bold; font-family:monospace;">00</div>
+              <div style="color:#64748b; font-size:8px; margin-top:2px;">HOURS</div>
+            </div>
+            <div style="background:#200a14; border:1px solid #4c0d1e; border-radius:8px; padding:10px 14px; min-width:60px;">
+              <div id="cdMinutes" style="color:#ef4444; font-size:22px; font-weight:bold; font-family:monospace;">59</div>
+              <div style="color:#64748b; font-size:8px; margin-top:2px;">MINUTES</div>
+            </div>
+            <div style="background:#200a14; border:1px solid #4c0d1e; border-radius:8px; padding:10px 14px; min-width:60px;">
+              <div id="cdSeconds" style="color:#ef4444; font-size:22px; font-weight:bold; font-family:monospace;">59</div>
+              <div style="color:#64748b; font-size:8px; margin-top:2px;">SECONDS</div>
+            </div>
+          </div>
+
+          <!-- Gradient Progress Bar -->
+          <div style="width:100%; height:4px; background:#1c1427; border-radius:2px; overflow:hidden; margin-bottom:10px;">
+            <div id="lockdownProgress" style="width:60%; height:100%; background:linear-gradient(90deg, #f59e0b, #6366f1);"></div>
+          </div>
+
+          <!-- Footer Info Bar -->
+          <div style="display:flex; justify-content:space-between; font-size:9px;">
+            <span style="color:#f59e0b; font-weight:600;">Authority: <span style="color:#f59e0b;">ADITYA-OWNER</span></span>
+            <span style="color:#64748b;">Duration: <strong style="color:#94a3b8;">60 mins</strong></span>
+          </div>
+        </div>
+
+        <!-- Owner Override / Verification Toggle Button -->
+        <button onclick="document.getElementById('ownerKeyContainer').style.display='block'" style="background:transparent; border:1px dashed #334155; border-radius:6px; color:#94a3b8; padding:8px 16px; font-size:11px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+          🔑 Owner Override / Terminate Shutdown
+        </button>
+
+        <!-- Hidden Input Field for Key Verification -->
+        <div id="ownerKeyContainer" style="display:none; margin-top:16px; width:100%;">
+          <input type="password" id="ownerKeyTerminationInput" placeholder="Enter Secret Owner Key" onkeydown="if(event.key==='Enter') document.getElementById('btnTerminateShutdown')?.click()" style="width:100%; background:#050508; border:1px solid #334155; border-radius:6px; padding:8px; color:#fff; font-size:12px; margin-bottom:8px; box-sizing:border-box; text-align:center;" />
+          <button id="btnTerminateShutdown" style="width:100%; background:#ef4444; color:#fff; border:none; border-radius:6px; padding:8px; font-size:12px; font-weight:600; cursor:pointer;">
+            Terminate Emergency Shutdown
+          </button>
+          <small id="ownerAuthError" style="color:#f87171; font-size:11px; display:none; margin-top:8px; text-align:center;"></small>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Global Broadcast Banner (Live Moderation Policy) -->
+    <div id="globalBroadcastBanner" style="display:none; position:fixed; top:0; left:0; width:100%; background:linear-gradient(90deg, #dc2626, #b91c1c); color:#ffffff; font-weight:700; font-size:13px; text-align:center; padding:10px 16px; z-index:99998; box-shadow:0 2px 10px rgba(0,0,0,0.5); letter-spacing:0.5px;"></div>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
