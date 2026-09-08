@@ -84,12 +84,12 @@ export function renderProfileCard(userId: string, userData: any) {
 
       <div style="margin-top:12px;">
         <label style="font-size:10px; color:#aaa; font-weight:bold;">ADD/DEDUCT GEMS (+/-) [CURRENT: 💎 ${gemsCount.toLocaleString()}]</label>
-        <input type="number" id="gemDelta" placeholder="e.g. 500 or -100" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; box-sizing:border-box; outline:none; font-family:monospace;">
+        <input type="number" id="gemDelta" name="gem_delta" placeholder="500 or -100" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; box-sizing:border-box; outline:none; font-family:monospace;">
       </div>
 
       <div style="margin-top:12px;">
         <label style="font-size:10px; color:#aaa; font-weight:bold;">ADD/DEDUCT COINS (+/-) [CURRENT: 🪙 ${coinsCount.toLocaleString()}]</label>
-        <input type="number" id="coinDelta" placeholder="e.g. 5000 or -1000" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; box-sizing:border-box; outline:none; font-family:monospace;">
+        <input type="number" id="coinDelta" name="coin_delta" placeholder="5000 or -1000" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; box-sizing:border-box; outline:none; font-family:monospace;">
       </div>
 
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:18px;">
@@ -531,6 +531,8 @@ export const CommandControlUsersModule: React.FC = () => {
           <div>
             <label style={{ fontSize: '10px', color: '#aaa', fontWeight: 700 }}>SELECT GAME</label>
             <select
+              name="game_select"
+              id="game_select"
               value={selectedGameId}
               onChange={(e) => {
                 const nextId = e.target.value;
@@ -578,6 +580,8 @@ export const CommandControlUsersModule: React.FC = () => {
           <div>
             <label style={{ fontSize: '10px', color: '#aaa', fontWeight: 700 }}>ENTRY FEE</label>
             <input
+              name="entry_fee"
+              id="entry_fee"
               type="number"
               value={customFee}
               onChange={(e) => setCustomFee(e.target.value)}
@@ -599,6 +603,8 @@ export const CommandControlUsersModule: React.FC = () => {
           <div>
             <label style={{ fontSize: '10px', color: '#aaa', fontWeight: 700 }}>CURRENCY</label>
             <select
+              name="currency_type"
+              id="currency_type"
               value={customCurrency}
               onChange={(e) => setCustomCurrency(e.target.value as any)}
               style={{
@@ -613,8 +619,8 @@ export const CommandControlUsersModule: React.FC = () => {
                 outline: 'none'
               }}
             >
-              <option value="coins">Coins</option>
-              <option value="gems">Gems</option>
+              <option value="Coins">Coins</option>
+              <option value="Gems">Gems</option>
             </select>
           </div>
         </div>
@@ -655,7 +661,8 @@ export const CommandControlUsersModule: React.FC = () => {
           <input
             type="text"
             id="searchInput"
-            placeholder="Enter target Username or ID (e.g. ADITYA-OWNER)"
+            name="target_user"
+            placeholder="Target Username or ID"
             style={{
               flex: 1,
               padding: '10px',

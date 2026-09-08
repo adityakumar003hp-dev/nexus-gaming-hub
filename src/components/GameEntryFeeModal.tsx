@@ -45,8 +45,8 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
   const coins = getUserPoints();
   const gems = getUserGems();
 
-  const hasEnoughCoins = coins >= 200;
-  const hasEnoughGems = gems >= 100;
+  const hasEnoughCoins = coins >= 2000;
+  const hasEnoughGems = gems >= 2000;
   const hasNoBalance = !hasEnoughCoins && !hasEnoughGems;
 
   if (!isOpen) return null;
@@ -62,7 +62,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
     if (!canPlay) {
       soundFx.playError();
       setErrorMessage(
-        '🪙 Insufficient Balance!\nYou need 200 Coins or 100 Gems to enter this game.\nEarn more currency via the Wheel of Fortune, completing Tasks, or winning matches!'
+        '🪙 Insufficient Balance!\nYou need 2000 Coins or 2000 Gems to enter this game or rematch.\nEarn more currency via the Wheel of Fortune, completing Tasks, or winning matches!'
       );
       return;
     }
@@ -73,7 +73,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
     if (success) {
       soundFx.playWin();
       setSuccessMessage(
-        `✅ Entry Fee Deducted: -${type === 'coins' ? '200 🪙 Coins' : '100 💎 Gems'}! Entering Match...`
+        `✅ Entry Fee Deducted: -${type === 'coins' ? '2000 🪙 Coins' : '2000 💎 Gems'}! Entering Match...`
       );
 
       setTimeout(() => {
@@ -84,7 +84,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
     } else {
       setIsProcessing(false);
       setErrorMessage(
-        '🪙 Insufficient Balance!\nYou need 200 Coins or 100 Gems to enter this game.\nEarn more currency via the Wheel of Fortune, completing Tasks, or winning matches!'
+        '🪙 Insufficient Balance!\nYou need 2000 Coins or 2000 Gems to enter this game or rematch.\nEarn more currency via the Wheel of Fortune, completing Tasks, or winning matches!'
       );
     }
   };
@@ -139,7 +139,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
               <span>🪙</span>
               <span>{coins.toLocaleString()}</span>
             </div>
-            <span className="text-[9px] text-slate-500 mt-0.5">Need: 200 🪙</span>
+            <span className="text-[9px] text-slate-500 mt-0.5">Need: 2,000 🪙</span>
           </div>
 
           <div className="w-px h-8 bg-slate-800" />
@@ -152,7 +152,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
               <span>💎</span>
               <span>{gems.toLocaleString()}</span>
             </div>
-            <span className="text-[9px] text-slate-500 mt-0.5">Need: 100 💎</span>
+            <span className="text-[9px] text-slate-500 mt-0.5">Need: 2,000 💎</span>
           </div>
         </div>
 
@@ -166,7 +166,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
                   🪙 Insufficient Balance!
                 </strong>
                 <p className="text-[11px] leading-relaxed text-rose-100">
-                  You need <strong>200 Coins</strong> or <strong>100 Gems</strong> to enter this game.
+                  You need <strong>2,000 Coins</strong> or <strong>2,000 Gems</strong> to enter this game or rematch.
                   Earn more currency via the Wheel of Fortune, completing Tasks, or winning matches!
                 </p>
               </div>
@@ -217,7 +217,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
           </label>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {/* Option 1: Pay 200 Coins */}
+            {/* Option 1: Pay 2000 Coins */}
             <button
               type="button"
               disabled={isProcessing}
@@ -230,7 +230,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
             >
               <div className="flex items-center justify-between w-full">
                 <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
-                  🪙 200 Coins
+                  🪙 2,000 Coins
                 </span>
                 {hasEnoughCoins ? (
                   <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">
@@ -247,7 +247,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
               </span>
             </button>
 
-            {/* Option 2: Pay 100 Gems */}
+            {/* Option 2: Pay 2000 Gems */}
             <button
               type="button"
               disabled={isProcessing}
@@ -260,7 +260,7 @@ export const GameEntryFeeModal: React.FC<GameEntryFeeModalProps> = ({
             >
               <div className="flex items-center justify-between w-full">
                 <span className="text-xs font-bold text-fuchsia-300 flex items-center gap-1">
-                  💎 100 Gems
+                  💎 2,000 Gems
                 </span>
                 {hasEnoughGems ? (
                   <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">

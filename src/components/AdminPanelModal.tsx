@@ -680,8 +680,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   <input
                     type="text"
                     id="admBroadcastInput"
+                    name="broadcast_message"
                     value={broadcastMsg}
-                    placeholder="Enter system notification message to push across all players..."
+                    placeholder="system notification"
                     onChange={(e) => setBroadcastMsg(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendBroadcast()}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none font-mono"
@@ -690,7 +691,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     onClick={handleSendBroadcast}
                     className="adm-btn primary px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider bg-sky-500 hover:bg-sky-400 text-slate-950 font-mono transition cursor-pointer active:scale-95 shrink-0"
                   >
-                    Broadcast
+                    BROADCAST
                   </button>
                 </div>
               </div>
@@ -703,6 +704,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   <input
                     type="number"
                     id="admChatSlowmode"
+                    name="chat_cooldown"
+                    placeholder="3"
                     value={chatSlowmode}
                     min="0"
                     onChange={(e) => setChatSlowmode(Number(e.target.value))}
@@ -716,6 +719,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   </label>
                   <select
                     id="admChatFilter"
+                    name="profanity_filter"
                     value={chatFilter}
                     onChange={(e) => setChatFilter(e.target.value as any)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none"
@@ -730,7 +734,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                 onClick={handleSaveChatSettings}
                 className="adm-btn success px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white font-mono transition cursor-pointer active:scale-95 shadow-md"
               >
-                Apply Chat Rules
+                APPLY CHAT RULES
               </button>
             </div>
           )}
@@ -752,8 +756,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     <input
                       type="text"
                       id="tournName"
+                      name="tourn_name"
                       value={tournName}
-                      placeholder="e.g. Grand Blitz Showdown"
+                      placeholder="Grand Blitz Showdown"
                       onChange={(e) => setTournName(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none font-mono"
                     />
@@ -766,6 +771,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     <input
                       type="number"
                       id="tournPrize"
+                      name="tourn_prize"
                       value={tournPrize}
                       placeholder="10000"
                       onChange={(e) => setTournPrize(e.target.value)}
@@ -780,6 +786,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     <input
                       type="number"
                       id="tournFee"
+                      name="tourn_fee"
                       value={tournFee}
                       placeholder="200"
                       onChange={(e) => setTournFee(e.target.value)}
@@ -792,6 +799,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     <input
                       type="number"
                       id="tournMax"
+                      name="tourn_max_players"
                       value={tournMax}
                       placeholder="64"
                       onChange={(e) => setTournMax(e.target.value)}
@@ -804,7 +812,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   onClick={handleCreateTournament}
                   className="adm-btn primary px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-amber-500 hover:bg-amber-400 text-slate-950 font-mono transition cursor-pointer active:scale-95 shadow-md flex items-center gap-1.5"
                 >
-                  <span>🚀 Launch Tournament</span>
+                  <span>🚀 LAUNCH TOURNAMENT</span>
                 </button>
               </div>
 

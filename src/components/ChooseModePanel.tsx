@@ -62,7 +62,7 @@ export const ChooseModePanel: React.FC<ChooseModePanelProps> = ({
                 <div className="text-[11px] text-indigo-300/80 font-medium flex items-center justify-between">
                   <span>Random Opponent</span>
                   <span id="labelQuickMatchFee" className="bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30 font-bold">
-                    <span id="entryFeeDisplay">100 Coins</span>
+                    <span id="entryFeeDisplay">2000 Coins / Gems</span>
                   </span>
                 </div>
               </div>
@@ -94,7 +94,7 @@ export const ChooseModePanel: React.FC<ChooseModePanelProps> = ({
                   </div>
                   <div className="text-[11px] text-slate-400 font-medium flex items-center justify-between">
                     <span>{activeTier.name} Master</span>
-                    <span id="labelChessProFee" className="bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30 font-bold">500 Coins</span>
+                    <span id="labelChessProFee" className="bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30 font-bold">2000 Coins / Gems</span>
                   </div>
                 </div>
               </div>

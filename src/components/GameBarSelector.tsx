@@ -64,14 +64,7 @@ export const GameBarSelector: React.FC<GameBarSelectorProps> = ({
                   if (item.id === 'all') {
                     if (onOpenMultiGameHub) onOpenMultiGameHub();
                   } else {
-                    const boardGameId = item.id;
-                    if (typeof (window as any).setActiveGame === 'function') {
-                      (window as any).setActiveGame(boardGameId);
-                    } else {
-                      GameEconomy.requestGameStart(boardGameId, item.title, () => {
-                        onSelectGame(boardGameId);
-                      });
-                    }
+                    onSelectGame(item.id as any);
                   }
                 }}
                 className={`game-card px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 whitespace-nowrap active:scale-95 cursor-pointer ${
@@ -119,13 +112,7 @@ export const GameBarSelector: React.FC<GameBarSelectorProps> = ({
                   data-game-title={g.title}
                   onClick={() => {
                     setShowDropdown(false);
-                    if (typeof (window as any).setActiveGame === 'function') {
-                      (window as any).setActiveGame(g.id);
-                    } else {
-                      GameEconomy.requestGameStart(g.id, g.title, () => {
-                        onSelectGame(g.id);
-                      });
-                    }
+                    onSelectGame(g.id as any);
                   }}
                   className={`game-card game-item w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
                     activeBoardGame === g.id

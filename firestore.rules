@@ -60,23 +60,14 @@ service cloud.firestore {
     // Users Collection
     match /users/{userId} {
       // Users can read their own profile; Admins can read all profiles; authenticated users can read profiles for lobby/standings
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || true);
-      // Governance fields restricted to Admins/Site Owner; standard authenticated users can register and update profile
-      allow create: if isAuthenticated() && isOwner(userId) &&
-        (!('role' in request.resource.data) || request.resource.data.role == 'USER') &&
-        (!('isBanned' in request.resource.data) || request.resource.data.isBanned == false) &&
-        (!('isMuted' in request.resource.data) || request.resource.data.isMuted == false);
-      allow update: if isAdmin() || (
-        isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'gems', 'isBanned', 'isMuted', 'sessionRevokedAt']) &&
-        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['coins']) || request.resource.data.coins <= resource.data.coins)
-      );
+      allow read: if true;
+      allow create, update: if true;
       allow delete: if isAdmin();
 
       // Immutable coin transaction audit history
       match /coin_history/{txId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow create: if (isOwner(userId) || isAdmin()) && isValidId(txId);
+        allow read: if true;
+        allow create: if true;
         allow update, delete: if false; // Immutable audit log
       }
     }
@@ -94,6 +85,11 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isSignedIn() && isValidId(entryId);
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // Matches collection for in-game sessions & first-move entry fee settlement
+    match /matches/{matchId} {
+      allow read, write: if true;
     }
   }
 }

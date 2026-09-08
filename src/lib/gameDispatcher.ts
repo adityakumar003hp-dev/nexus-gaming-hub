@@ -4,6 +4,7 @@
  */
 
 import { auth, joinGameAndDeductFee } from './firebase';
+import { executeGameSwitchFee } from './entryFeeEngine';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from './firebase';
@@ -352,7 +353,7 @@ export async function setActiveGame(
       btn.classList.add('opacity-70', 'cursor-wait');
     });
 
-    // 2. Perform Atomic Entry Fee Deduction on backend
+    // 2. Perform Game Switch & trigger Match Entry Fee flow
     const paymentType = options && 'paymentType' in options ? (options as SetActiveGameOptions).paymentType : undefined;
     const amount = options && 'amount' in options ? (options as SetActiveGameOptions).amount : undefined;
 

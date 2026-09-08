@@ -153,9 +153,9 @@ export const GameEconomy = {
     isMatchInProgress: false,
   },
 
-  // Target entry fees for every game
-  FEE_COINS: 100,
-  FEE_GEMS: 50,
+  // Target entry fees for every game and rematch
+  FEE_COINS: 2000,
+  FEE_GEMS: 2000,
 
   setMatchStartListener(fn: (() => void) | null) {
     onMatchStartListener = fn;
@@ -267,7 +267,7 @@ export const GameEconomy = {
     return true;
   },
 
-  showInsufficientError(type: 'coins' | 'gems', required: number = 100) {
+  showInsufficientError(type: 'coins' | 'gems', required: number = 2000) {
     const entryStep = document.getElementById('entrySelectStep');
     const errorStep = document.getElementById('insufficientStep');
     const titleEl = document.getElementById('insufficientTitle');
@@ -281,12 +281,12 @@ export const GameEconomy = {
     if (type === 'coins') {
       if (titleEl) titleEl.innerText = '🪙 Insufficient Coins!';
       if (msgEl) {
-        msgEl.innerHTML = `Entry costs <strong>100 Coins</strong>. You currently have <strong>${this.playerState.coins.toLocaleString()} Coins</strong>.<br><br>Earn coins via daily tasks or spin the wheel!`;
+        msgEl.innerHTML = `Entry costs <strong>2,000 Coins</strong>. You currently have <strong>${this.playerState.coins.toLocaleString()} Coins</strong>.<br><br>Earn coins via daily tasks or spin the wheel!`;
       }
     } else {
       if (titleEl) titleEl.innerText = '💎 Insufficient Gems!';
       if (msgEl) {
-        msgEl.innerHTML = `Entry costs <strong>50 Gems</strong>. You currently have <strong>${this.playerState.gems.toLocaleString()} Gems</strong>.<br><br>Earn gems via daily tasks or spin the wheel!`;
+        msgEl.innerHTML = `Entry costs <strong>2,000 Gems</strong>. You currently have <strong>${this.playerState.gems.toLocaleString()} Gems</strong>.<br><br>Earn gems via daily tasks or spin the wheel!`;
       }
     }
   },
@@ -509,17 +509,11 @@ export function initGlobalGameEntryListeners() {
  * JavaScript Alert Integration Code for Insufficient Balance checking
  */
 export function checkBalanceAndPlay(currencyType: 'coins' | 'gems'): boolean {
-  if (currencyType === 'coins' && GameEconomy.playerState.coins < 100) {
-    alert(
-      '🪙 Insufficient Coins! You need 100 Coins to enter. Complete tasks or spin the Wheel of Fortune to earn more!'
-    );
+  if (currencyType === 'coins' && GameEconomy.playerState.coins < 2000) {
     return false;
   }
 
-  if (currencyType === 'gems' && GameEconomy.playerState.gems < 50) {
-    alert(
-      '💎 Insufficient Gems! You need 50 Gems to enter. Complete tasks or spin the Wheel of Fortune to earn more!'
-    );
+  if (currencyType === 'gems' && GameEconomy.playerState.gems < 2000) {
     return false;
   }
 

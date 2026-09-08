@@ -107,9 +107,27 @@
         "updatedAt": { "type": "string", "description": "ISO timestamp or server timestamp" }
       },
       "required": ["activeGameId"]
+    },
+    "matches": {
+      "title": "Match Session & Entry Fee Settlement",
+      "description": "Active game matches, players, turn moves, and fee settlement flags",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Match ID" },
+        "gameId": { "type": "string", "description": "Game mode identifier" },
+        "players": { "type": "object", "description": "Map of player IDs to player status and fee settlement" },
+        "lastMove": { "type": "object", "description": "Last move details" },
+        "turnUserId": { "type": "string", "description": "Next turn player ID" },
+        "status": { "type": "string", "description": "active, completed, abandoned" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp" }
+      }
     }
   },
   "firestore": {
+    "/matches/{matchId}": {
+      "schema": "matches",
+      "description": "Match sessions with real-time moves and first-move entry fee settlement"
+    },
     "/users/{userId}": {
       "schema": "users",
       "description": "User profile documents accessible and modifiable by the profile owner"

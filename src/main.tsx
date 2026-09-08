@@ -4,6 +4,8 @@ import App from './App.tsx';
 import './index.css';
 import './lib/emergencySystem';
 import './lib/adminSync';
+import './lib/adminGameBridge';
+import './lib/entryFeeEngine';
 import { bindGameFeeButtons } from './lib/gameFeeDeduction';
 
 // Bind game mode buttons when page loads

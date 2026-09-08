@@ -340,7 +340,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               className="w-full py-3 px-4 rounded-xl bg-[#4f46e5] hover:bg-[#4338ca] text-white font-bold transition flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(99,102,241,0.4)] border border-indigo-400/50 active:scale-[0.99] cursor-pointer"
             >
               <RefreshCw className="w-4 h-4" />
-              <span>Play Again</span>
+              <span>Rematch &amp; Play Again (2000 🪙 / 2000 💎)</span>
             </button>
 
             <button

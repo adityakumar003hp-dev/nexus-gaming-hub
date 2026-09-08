@@ -8,6 +8,38 @@ export const firebaseConfig = {
   messagingSenderId: "924451548640"
 };
 
-export const app = (typeof window !== 'undefined' && window.app) ? window.app : null;
-export const db = (typeof window !== 'undefined' && window.db) ? window.db : null;
-export const auth = (typeof window !== 'undefined' && window.auth) ? window.auth : null;
+import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getAuth } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+let appInstance = null;
+let dbInstance = null;
+let authInstance = null;
+
+if (typeof window !== 'undefined' && window.db) {
+  appInstance = window.app;
+  dbInstance = window.db;
+  authInstance = window.auth;
+} else {
+  try {
+    appInstance = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    dbInstance = getFirestore(appInstance, firebaseConfig.firestoreDatabaseId);
+    authInstance = getAuth(appInstance);
+    if (typeof window !== 'undefined') {
+      window.app = appInstance;
+      window.db = dbInstance;
+      window.auth = authInstance;
+    }
+  } catch (e) {
+    console.warn("firebase_config standalone initialization notice:", e);
+    if (typeof window !== 'undefined') {
+      appInstance = window.app || null;
+      dbInstance = window.db || null;
+      authInstance = window.auth || null;
+    }
+  }
+}
+
+export const app = appInstance;
+export const db = dbInstance;
+export const auth = authInstance;

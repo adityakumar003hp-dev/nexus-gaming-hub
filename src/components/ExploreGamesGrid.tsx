@@ -79,14 +79,8 @@ export const ExploreGamesGrid: React.FC<ExploreGamesGridProps> = ({
               data-game-id={game.id}
               data-game-title={game.name}
               onClick={() => {
-                if (typeof (window as any).selectAndLaunchGame === 'function') {
-                  (window as any).selectAndLaunchGame(launchId);
-                } else {
-                  GameEconomy.requestGameStart(game.id, game.name, () => {
-                    onSelectGame(game.id);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  });
-                }
+                onSelectGame(game.id);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               className={`game-card game-item p-3 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all duration-200 group active:scale-95 text-center cursor-pointer ${
                 isActive

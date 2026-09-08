@@ -12,8 +12,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 // Central cache for all game mode entry fees (synced with Firestore)
 export const gameFeeConfig: Record<string, number> = {
-  QUICK_MATCH: 100,
-  CHESS_PRO: 500,
+  QUICK_MATCH: 2000,
+  CHESS_PRO: 2000,
   WHEEL_SPIN: 50,
   PASS_PLAY: 0
 };

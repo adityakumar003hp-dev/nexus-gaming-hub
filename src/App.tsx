@@ -67,9 +67,10 @@ import { CurrencyExchangeModal } from './components/CurrencyExchangeModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { EmergencyLockdownOverlay } from './components/EmergencyLockdownOverlay';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { db, subscribeToActiveGame, type ActiveGamePlatformState } from './lib/firebase';
+import { db, auth, subscribeToActiveGame, type ActiveGamePlatformState } from './lib/firebase';
 import { initDelegatedGameSelector, setActiveGame, resolveGameMetadata } from './lib/gameDispatcher';
 import { OwnerVerificationModal } from './components/OwnerVerificationModal';
+import { executeFirstMoveWithFee } from './lib/entryFeeEngine';
 import { PlayerStatusCardDeck } from './components/PlayerStatusCardDeck';
 import { PrivacyTermsModal } from './components/PrivacyTermsModal';
 import { CommunitySocialModal } from './components/CommunitySocialModal';
@@ -98,14 +99,15 @@ import { ReferAndEarnModal } from './components/ReferAndEarnModal';
 import { LeaderboardAndRecentMatches } from './components/LeaderboardAndRecentMatches';
 import { AboutUsSection } from './components/AboutUsSection';
 import { EmergencySystem } from './lib/emergencySystem';
+import { ExploreGamesGrid } from './components/ExploreGamesGrid';
 
 import { telemetryEngine } from './utils/telemetryEngine';
 import { GameEconomy, initGlobalGameEntryListeners } from './utils/gameEconomy';
 import { evaluateBoard } from './utils/evalEngine';
 import { detectOpening } from './utils/openingBook';
-import { recordPlayerCaptureForHatrick, updateQuestProgress, applyMatchLossPenalty, getUserPoints } from './utils/pointsManager';
+import { recordPlayerCaptureForHatrick, updateQuestProgress, applyMatchLossPenalty, getUserPoints, getUserGems } from './utils/pointsManager';
 
-import { RotateCcw, BookOpen, Wand2, ShieldAlert, Flame, Sliders, History, Sparkles, Gamepad2 } from 'lucide-react';
+import { RotateCcw, BookOpen, Wand2, ShieldAlert, Flame, Sliders, History, Sparkles, Gamepad2, Lock, ArrowRight } from 'lucide-react';
 import { layoutToFen } from './utils/variantManager';
 import { soundFx } from './utils/audio';
 import {
@@ -144,6 +146,53 @@ const defaultSettings: GameSettings = {
   },
   aiDifficulty: 'medium',
 };
+
+export function getGameDisplayTitle(game: ActiveBoardGame): string {
+  switch (game) {
+    case 'chess':
+      return 'Duo Chess Arena';
+    case 'checkers':
+      return 'Checkers & Draughts Arena';
+    case 'backgammon':
+      return 'Backgammon Royale';
+    case 'snakes':
+      return 'Snakes & Ladders Arena';
+    case 'ludo':
+      return 'Ludo Royale Arena';
+    case 'gomoku':
+      return 'Gomoku 5-in-a-Row Arena';
+    case 'reversi':
+      return 'Reversi Othello Arena';
+    case 'connect4':
+      return 'Connect Four Arena';
+    case 'ultimatetictactoe':
+      return 'Ultimate Tic-Tac-Toe Arena';
+    case 'dotsandboxes':
+      return 'Dots & Boxes Arena';
+    case 'battleship':
+      return 'Battleship Naval Warfare Arena';
+    case 'sim':
+      return 'Sim Pencil Game Arena';
+    case 'uno':
+      return 'Uno Color Cards Arena';
+    case 'hearts':
+      return 'Hearts Royale Arena';
+    case 'ginrummy':
+      return 'Gin Rummy Arena';
+    case 'speed':
+      return 'Speed Cards Arena';
+    case 'carrom':
+      return 'Carrom Striker Arena';
+    case 'darts':
+      return 'Darts 3D Bullseye Arena';
+    case 'pingpong':
+      return 'Table Tennis Ping Pong Arena';
+    case 'business':
+      return 'International Business Arena';
+    default:
+      return `${String(game).toUpperCase()} Arena`;
+  }
+}
 
 export default function App() {
   // Main Chess Engine Instance
@@ -564,8 +613,10 @@ export default function App() {
         const mapped = idMap[detail.gameId.toUpperCase()];
         if (mapped) {
           setActiveBoardGame(mapped);
-          setHasPaidGameFee(true);
-          hasPaidGameFeeRef.current = true;
+          hasPaidGameFeeRef.current = false;
+          setHasPaidGameFee(false);
+          resetGame();
+          setIsEntryFeeModalOpen(true);
         }
       }
     };
@@ -576,9 +627,10 @@ export default function App() {
       const meta = resolveGameMetadata(gameIdentifier);
       if (meta && meta.boardId) {
         setActiveBoardGame(meta.boardId);
-        setHasPaidGameFee(true);
-        hasPaidGameFeeRef.current = true;
+        hasPaidGameFeeRef.current = false;
+        setHasPaidGameFee(false);
         resetGame();
+        setIsEntryFeeModalOpen(true);
       }
       setActiveGameBannerNotice(`⚡ Active Game Updated: ${meta?.title || gameIdentifier}`);
       setTimeout(() => setActiveGameBannerNotice(null), 6000);
@@ -594,13 +646,14 @@ export default function App() {
       const detail = e.detail;
       if (detail && detail.boardId) {
         setActiveBoardGame(detail.boardId);
-        setHasPaidGameFee(true);
-        hasPaidGameFeeRef.current = true;
+        hasPaidGameFeeRef.current = false;
+        setHasPaidGameFee(false);
         resetGame();
+        setIsEntryFeeModalOpen(true);
         setActiveGameBannerNotice(
-          `⚡ Active Game Switched: ${detail.gameTitle} (${detail.entryFee} ${detail.currency.toUpperCase()})`
+          `⚡ Active Game Switched: ${detail.gameTitle} - Match entry fee required to play.`
         );
-        setTimeout(() => setActiveGameBannerNotice(null), 7000);
+        setTimeout(() => setActiveGameBannerNotice(null), 5000);
       }
     };
 
@@ -915,15 +968,9 @@ export default function App() {
       const chess = chessRef.current;
       const piece = chess.get(from);
 
-      // Check and prompt entry fee on user's first turn / move
-      const isPlayerTurn = (gameMode === 'ai' && piece?.color === orientation) ||
-                           (gameMode === 'local') ||
-                           (gameMode === 'pvp' && piece?.color === myPvPColor);
-
-      if (!hasPaidGameFeeRef.current && moveRecords.length === 0 && isPlayerTurn) {
+      // Require match entry fee before any moves can be executed
+      if (!hasPaidGameFeeRef.current) {
         setPendingGameStartAction(() => () => {
-          hasPaidGameFeeRef.current = true;
-          setHasPaidGameFee(true);
           executeMove(from, to, promotionPiece);
         });
         setIsEntryFeeModalOpen(true);
@@ -1183,6 +1230,25 @@ export default function App() {
     soundFx.playClick();
   };
 
+  // Dedicated Universal Game Switcher with Mandatory Entry Fee Enforcement
+  const switchActiveGame = (gameId: ActiveBoardGame, newGameMode?: GameMode) => {
+    setActiveBoardGame(gameId);
+    if (newGameMode) {
+      setGameMode(newGameMode);
+    }
+    hasPaidGameFeeRef.current = false;
+    setHasPaidGameFee(false);
+    resetGame();
+    setIsEntryFeeModalOpen(true);
+    setActiveGameBannerNotice(`⚡ Selected: ${getGameDisplayTitle(gameId)} - Match entry fee required to play.`);
+    setTimeout(() => setActiveGameBannerNotice(null), 5000);
+    const gameContainer = document.getElementById('gameContainer') || document.getElementById('boardRenderArea');
+    if (gameContainer) {
+      const topOffset = gameContainer.getBoundingClientRect().top + window.pageYOffset - 80;
+      window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+    }
+  };
+
   // Prompt Game Entry Fee Deduction Menu
   const promptGameEntryFee = (onSuccessAction?: () => void) => {
     setPendingGameStartAction(() => onSuccessAction || (() => resetGame(true)));
@@ -1194,6 +1260,8 @@ export default function App() {
     (window as any).promptGameFeeAndStart = promptGameEntryFee;
     (window as any).resetBoard = () => resetGame(true);
     (window as any).startMatchTimer = () => setIsPaused(false);
+    (window as any).switchActiveGame = switchActiveGame;
+    (window as any).selectAndLaunchGame = switchActiveGame;
   }
 
   // Undo Move (Single-Player & Local mode)
@@ -1344,7 +1412,7 @@ export default function App() {
 
   // Determine board interaction read-only rule
   const isMyTurnInPvP = gameMode === 'pvp' ? activeTurn === myPvPColor : true;
-  const isReadOnlyBoard = !isGameActive || isReviewMode || !isMyTurnInPvP;
+  const isReadOnlyBoard = !hasPaidGameFee || !isGameActive || isReviewMode || !isMyTurnInPvP;
 
   return (
     <div
@@ -1495,10 +1563,7 @@ export default function App() {
         {/* 20 Games Category Bar Selector */}
         <GameBarSelector
           activeBoardGame={activeBoardGame}
-          onSelectGame={(game) => {
-            setActiveBoardGame(game);
-            resetGame();
-          }}
+          onSelectGame={(game) => switchActiveGame(game)}
           onOpenMultiGameHub={() => setIsGameHubOpen(true)}
         />
 
@@ -1506,7 +1571,7 @@ export default function App() {
         <ChooseModePanel
           gameMode={gameMode}
           onChangeGameMode={(mode) => {
-            setGameMode(mode);
+            switchActiveGame(activeBoardGame, mode);
             if (mode === 'pvp') {
               setIsMatchmakingOpen(true);
             }
@@ -1572,7 +1637,104 @@ export default function App() {
             </div>
           )}
 
-          {activeBoardGame === 'chess' && (
+          {/* Active Board Game Arena Container with Mandatory Entry Fee Lock */}
+          <div className="w-full relative flex flex-col items-center justify-center">
+            {/* Locked Gate Overlay when Entry Fee has not been paid */}
+            {!hasPaidGameFee && (
+              <div
+                id="matchEntryFeeLockedOverlay"
+                onClick={() => setIsEntryFeeModalOpen(true)}
+                className="absolute inset-0 z-30 min-h-[480px] bg-slate-950/85 backdrop-blur-md rounded-3xl border-2 border-purple-500/50 shadow-[0_0_60px_rgba(168,85,247,0.25)] flex flex-col items-center justify-center p-6 text-center cursor-pointer select-none animate-in fade-in zoom-in-95 duration-200"
+              >
+                {/* Glowing Lock Badge */}
+                <div className="relative mb-4">
+                  <div className="absolute -inset-2 bg-gradient-to-r from-amber-500 to-purple-600 rounded-2xl blur-lg opacity-70 animate-pulse" />
+                  <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-purple-600 flex items-center justify-center text-white text-3xl shadow-xl shadow-purple-500/30">
+                    <Lock className="w-8 h-8 text-white" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 max-w-md">
+                  <span className="text-[11px] uppercase font-mono font-black tracking-widest text-amber-400 bg-amber-500/15 px-3 py-1 rounded-full border border-amber-500/30 inline-block">
+                    Match Gate Locked
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider font-mono">
+                    Match Entry Fee Required
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-300 font-medium">
+                    To run and play <strong className="text-amber-300 font-bold">{getGameDisplayTitle(activeBoardGame)}</strong> ({gameMode.toUpperCase()}), pay the entry fee of <span className="text-amber-300 font-bold">2,000 🪙 Coins</span> or <span className="text-fuchsia-300 font-bold">2,000 💎 Gems</span> for every match and rematch.
+                  </p>
+                </div>
+
+                {/* Primary Action Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEntryFeeModalOpen(true);
+                  }}
+                  className="mt-5 py-3.5 px-8 rounded-2xl bg-gradient-to-r from-amber-500 via-purple-600 to-pink-600 hover:from-amber-400 hover:to-pink-500 text-white font-black text-sm sm:text-base shadow-xl shadow-purple-500/30 hover:shadow-purple-500/50 transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <span>🎮 Pay Entry Fee to Play (2000🪙 / 2000💎)</span>
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+
+                {/* Real-time Balances display */}
+                <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mt-6 text-xs text-slate-400">
+                  <div className="flex items-center gap-1.5 bg-slate-900/90 px-3.5 py-1.5 rounded-xl border border-slate-800 shadow-inner">
+                    <span>🪙 Your Coins:</span>
+                    <strong className="text-amber-300 font-mono font-bold">{getUserPoints().toLocaleString()}</strong>
+                    <span className="text-[10px] text-slate-500">(Need 2,000)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-slate-900/90 px-3.5 py-1.5 rounded-xl border border-slate-800 shadow-inner">
+                    <span>💎 Your Gems:</span>
+                    <strong className="text-fuchsia-300 font-mono font-bold">{getUserGems().toLocaleString()}</strong>
+                    <span className="text-[10px] text-slate-500">(Need 2,000)</span>
+                  </div>
+                </div>
+
+                {/* Quick actions if balance low */}
+                <div className="flex items-center gap-3 mt-4 text-xs">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsDailyWheelOpen(true);
+                    }}
+                    className="text-purple-400 hover:text-purple-300 underline font-semibold cursor-pointer flex items-center gap-1"
+                  >
+                    <span>🎡 Spin Wheel</span>
+                  </button>
+                  <span className="text-slate-600">•</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsQuestsOpen(true);
+                    }}
+                    className="text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer flex items-center gap-1"
+                  >
+                    <span>🎯 Tasks & Quests</span>
+                  </button>
+                  <span className="text-slate-600">•</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExchangeDirection('gemToCoin');
+                      setIsExchangeModalOpen(true);
+                    }}
+                    className="text-cyan-400 hover:text-cyan-300 underline font-semibold cursor-pointer flex items-center gap-1"
+                  >
+                    <span>🔄 Convert Currency</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Board Container with blur & disabled state when fee not paid */}
+            <div className={`w-full flex flex-col items-center gap-3 transition-all duration-300 ${!hasPaidGameFee ? 'pointer-events-none opacity-20 filter blur-[1.5px] select-none' : ''}`}>
+              {activeBoardGame === 'chess' && (
             <>
               {/* Universal Game & AI Options Control Panel */}
               <GameOptionsControlPanel
@@ -1892,15 +2054,22 @@ export default function App() {
               />
             </div>
           )}
+            </div>
+          </div>
 
           {/* Action Row: Reset, Rules, Arcade Booth, 96 FX Hub & Motion Library */}
           <div className="w-full max-w-[580px] grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2">
             <button
-              onClick={resetGame}
+              onClick={() => {
+                hasPaidGameFeeRef.current = false;
+                setHasPaidGameFee(false);
+                resetGame();
+                setIsEntryFeeModalOpen(true);
+              }}
               className="py-2.5 px-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-white font-bold text-xs border border-white/10 hover:border-amber-400/40 shadow-lg transition active:scale-95 flex items-center justify-center gap-1.5"
             >
               <RotateCcw className="w-4 h-4 text-amber-400" />
-              <span>Reset</span>
+              <span>Reset & Fee</span>
             </button>
 
             <button
@@ -1965,7 +2134,7 @@ export default function App() {
               whiteTime={whiteTime}
               blackTime={blackTime}
               activeTurn={activeTurn}
-              isGameActive={isGameActive && gameResult.winner === null}
+              isGameActive={hasPaidGameFee && isGameActive && gameResult.winner === null}
               isPaused={isPaused}
               isUntimed={isUntimed}
               onTimeout={handleTimeout}
@@ -2063,6 +2232,13 @@ export default function App() {
           }}
         />
 
+        {/* Explore All 20 Playable Arena Games */}
+        <ExploreGamesGrid
+          activeBoardGame={activeBoardGame}
+          onSelectGame={(game) => switchActiveGame(game)}
+          onOpenMultiGameHub={() => setIsGameHubOpen(true)}
+        />
+
         {/* Global Leaderboard & Recent Match History */}
         <LeaderboardAndRecentMatches
           currentUser={currentUser}
@@ -2100,8 +2276,18 @@ export default function App() {
               : { name: gameMode === 'ai' ? 'Computer' : 'Player 2' }
           }
           moveCount={moveRecords.length || 12}
-          onNewGame={() => resetGame(true)}
-          onReviewBoard={() => setGameResult({ winner: null, reason: null })}
+          onNewGame={() => {
+            setGameResult({ winner: null, reason: null });
+            hasPaidGameFeeRef.current = false;
+            setHasPaidGameFee(false);
+            resetGame(true);
+            setIsEntryFeeModalOpen(true);
+          }}
+          onReviewBoard={() => {
+            setGameResult({ winner: null, reason: null });
+            hasPaidGameFeeRef.current = false;
+            setHasPaidGameFee(false);
+          }}
           onOpenCoinHistory={() => setIsCoinHistoryModalOpen(true)}
         />
       )}
@@ -2654,17 +2840,26 @@ export default function App() {
       {/* Game Entry Fee Deduction Modal */}
       <GameEntryFeeModal
         isOpen={isEntryFeeModalOpen}
-        gameTitle={
-          activeBoardGame === 'chess'
-            ? 'Duo Chess Arena'
-            : `${activeBoardGame.toUpperCase()} Arena`
-        }
+        gameTitle={getGameDisplayTitle(activeBoardGame)}
         gameMode={gameMode}
         onClose={() => {
           setIsEntryFeeModalOpen(false);
           setPendingGameStartAction(null);
         }}
         onConfirmStart={() => {
+          hasPaidGameFeeRef.current = true;
+          setHasPaidGameFee(true);
+          if (currentUser) {
+            setCurrentUser((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    gamerPoints: getUserPoints(),
+                    gems: getUserGems(),
+                  }
+                : null
+            );
+          }
           if (pendingGameStartAction) {
             pendingGameStartAction();
           }
