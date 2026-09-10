@@ -97,15 +97,89 @@ export const GlobalChatDrawer: React.FC<GlobalChatDrawerProps> = ({
   onClose,
   currentUser,
 }) => {
-  const [messages, setMessages] = useState<GlobalChatMessage[]>(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState<GlobalChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('global_chat_history');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_MESSAGES;
+  });
   const [inputText, setInputText] = useState('');
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
   const [moderationWarning, setModerationWarning] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isChatLocked, setIsChatLocked] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && localStorage.getItem('admin_chat_locked') === 'true';
+  });
 
   const lastMessageTimeRef = useRef<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Sync messages to local storage
+  useEffect(() => {
+    try {
+      localStorage.setItem('global_chat_history', JSON.stringify(messages.slice(-50)));
+    } catch (e) {}
+  }, [messages]);
+
+  // Listen for admin moderation events
+  useEffect(() => {
+    const handleClearChat = () => {
+      setMessages([
+        {
+          id: `gmsg_cleared_${Date.now()}`,
+          sender: '🛡️ SYSTEM ADMIN',
+          avatar: '⚡',
+          text: '🧹 Global chat history was purged by an Administrator.',
+          timestamp: Date.now(),
+          isOwner: true,
+          tag: 'ADMIN ACTION',
+        },
+      ]);
+      localStorage.removeItem('global_chat_history');
+      soundFx.playError();
+      setModerationWarning('Global chat history has been cleared by Admin.');
+      setTimeout(() => setModerationWarning(null), 4000);
+    };
+
+    const handleAdminBroadcast = (e: any) => {
+      const text = e.detail?.text || e.detail?.message;
+      if (!text) return;
+      const broadcastMsg: GlobalChatMessage = {
+        id: `gmsg_broadcast_${Date.now()}`,
+        sender: '📢 GLOBAL ANNOUNCEMENT',
+        avatar: '👑',
+        text: String(text),
+        timestamp: Date.now(),
+        isOwner: true,
+        tag: 'OFFICIAL BROADCAST',
+      };
+      setMessages((prev) => [...prev, broadcastMsg]);
+      soundFx.playWin();
+    };
+
+    const handleChatLockToggle = (e: any) => {
+      const locked = !!e.detail?.locked;
+      setIsChatLocked(locked);
+      if (locked) {
+        setModerationWarning('🔒 Global chat has been locked by Administrator.');
+      } else {
+        setModerationWarning('🔓 Global chat unlocked.');
+      }
+      setTimeout(() => setModerationWarning(null), 4000);
+    };
+
+    window.addEventListener('admin_clear_global_chat', handleClearChat);
+    window.addEventListener('admin_broadcast_message', handleAdminBroadcast);
+    window.addEventListener('admin_chat_lock_toggled', handleChatLockToggle);
+
+    return () => {
+      window.removeEventListener('admin_clear_global_chat', handleClearChat);
+      window.removeEventListener('admin_broadcast_message', handleAdminBroadcast);
+      window.removeEventListener('admin_chat_lock_toggled', handleChatLockToggle);
+    };
+  }, []);
 
   // Auto-scroll to bottom on new message
   const scrollToBottom = () => {
@@ -172,28 +246,56 @@ export const GlobalChatDrawer: React.FC<GlobalChatDrawerProps> = ({
     const rawText = (textToSend !== undefined ? textToSend : inputText).trim();
     if (!rawText) return;
 
+    const username = currentUser?.username || 'Player';
+    const isOwnerUser = isSiteOwner(currentUser?.username || currentUser?.email);
+
+    // 1. Lockdown check
+    const chatLocked = localStorage.getItem('admin_chat_locked') === 'true';
+    if (chatLocked && !isOwnerUser) {
+      soundFx.playError();
+      setModerationWarning('🔒 Global chat is currently locked down by an Administrator.');
+      setTimeout(() => setModerationWarning(null), 4000);
+      return;
+    }
+
+    // 2. Mute check
+    const isUserMuted =
+      Boolean((currentUser as any)?.isMuted) ||
+      Boolean((currentUser as any)?.isChatMuted) ||
+      localStorage.getItem(`user_muted_${username.toLowerCase()}`) === 'true' ||
+      localStorage.getItem(`user_muted_${currentUser?.id}`) === 'true';
+
+    if (isUserMuted && !isOwnerUser) {
+      soundFx.playError();
+      setModerationWarning('🔇 You are muted by an Administrator and cannot post in global chat.');
+      setTimeout(() => setModerationWarning(null), 5000);
+      return;
+    }
+
     const now = Date.now();
     const timeSinceLast = now - lastMessageTimeRef.current;
+    const slowmodeSeconds = Number(localStorage.getItem('admin_chat_slowmode') || 3);
+    const effectiveCooldown = slowmodeSeconds * 1000;
 
-    // 1. Rate Limiting Check
-    if (timeSinceLast < COOLDOWN_MS) {
-      const remainingSec = Math.ceil((COOLDOWN_MS - timeSinceLast) / 1000);
-      setCooldownRemaining(COOLDOWN_MS - timeSinceLast);
-      setModerationWarning(`⏳ Slow down! Cooldown active for ${remainingSec}s.`);
+    // 3. Rate Limiting Check
+    if (timeSinceLast < effectiveCooldown && !isOwnerUser) {
+      const remainingSec = Math.ceil((effectiveCooldown - timeSinceLast) / 1000);
+      setCooldownRemaining(effectiveCooldown - timeSinceLast);
+      setModerationWarning(`⏳ Slow-mode active: please wait ${remainingSec}s before posting.`);
       setTimeout(() => setModerationWarning(null), 3000);
       return;
     }
 
-    // 2. Auto-Moderation Sanitize
-    const { cleanText, filteredCount } = sanitizeMessage(rawText);
+    // 4. Auto-Moderation Sanitize
+    const filterEnabled = localStorage.getItem('admin_chat_profanity_filter') !== 'disabled';
+    const { cleanText, filteredCount } = filterEnabled
+      ? sanitizeMessage(rawText)
+      : { cleanText: rawText, filteredCount: 0 };
 
     if (filteredCount > 0) {
-      setModerationWarning('🛡️ Auto-moderation active: inappropriate words were filtered.');
+      setModerationWarning('🛡️ Auto-moderation active: filtered flagged words.');
       setTimeout(() => setModerationWarning(null), 4000);
     }
-
-    const username = currentUser?.username || 'Player';
-    const isOwnerUser = isSiteOwner(currentUser?.username || currentUser?.email);
 
     const newMessage: GlobalChatMessage = {
       id: `gmsg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -209,7 +311,7 @@ export const GlobalChatDrawer: React.FC<GlobalChatDrawerProps> = ({
     setMessages((prev) => [...prev, newMessage]);
     setInputText('');
     lastMessageTimeRef.current = now;
-    setCooldownRemaining(COOLDOWN_MS);
+    setCooldownRemaining(effectiveCooldown);
 
     if (soundEnabled) {
       soundFx.playMove();

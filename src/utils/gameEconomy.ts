@@ -153,9 +153,99 @@ export const GameEconomy = {
     isMatchInProgress: false,
   },
 
-  // Target entry fees for every game and rematch
-  FEE_COINS: 2000,
-  FEE_GEMS: 2000,
+  // Target entry fees for every game and rematch (can be dynamically updated by Admin)
+  get FEE_COINS(): number {
+    return this.getFeeCoins();
+  },
+  set FEE_COINS(val: number) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('admin_game_fee_coins', String(val));
+      if (window.GAME_STATE) window.GAME_STATE.entryFeeCoins = val;
+    }
+  },
+
+  get FEE_GEMS(): number {
+    return this.getFeeGems();
+  },
+  set FEE_GEMS(val: number) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('admin_game_fee_gems', String(val));
+      if (window.GAME_STATE) window.GAME_STATE.entryFeeGems = val;
+    }
+  },
+
+  isFreeMode(): boolean {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('admin_free_mode') === 'true';
+  },
+
+  getFeeCoins(gameTitle?: string): number {
+    if (this.isFreeMode()) return 0;
+    if (typeof window !== 'undefined') {
+      if (gameTitle) {
+        try {
+          const rawOverrides = localStorage.getItem('admin_game_fee_overrides');
+          if (rawOverrides) {
+            const parsed = JSON.parse(rawOverrides);
+            const key = String(gameTitle).toLowerCase().replace(/[^a-z0-9]/g, '');
+            for (const [k, v] of Object.entries(parsed)) {
+              if (key.includes(k) && typeof (v as any).coins === 'number') {
+                return (v as any).coins;
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      const saved = localStorage.getItem('admin_game_fee_coins');
+      if (saved !== null && !isNaN(Number(saved))) return Number(saved);
+      if (window.GAME_STATE?.entryFeeCoins !== undefined) return window.GAME_STATE.entryFeeCoins;
+    }
+    return 2000;
+  },
+
+  getFeeGems(gameTitle?: string): number {
+    if (this.isFreeMode()) return 0;
+    if (typeof window !== 'undefined') {
+      if (gameTitle) {
+        try {
+          const rawOverrides = localStorage.getItem('admin_game_fee_overrides');
+          if (rawOverrides) {
+            const parsed = JSON.parse(rawOverrides);
+            const key = String(gameTitle).toLowerCase().replace(/[^a-z0-9]/g, '');
+            for (const [k, v] of Object.entries(parsed)) {
+              if (key.includes(k) && typeof (v as any).gems === 'number') {
+                return (v as any).gems;
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      const saved = localStorage.getItem('admin_game_fee_gems');
+      if (saved !== null && !isNaN(Number(saved))) return Number(saved);
+      if (window.GAME_STATE?.entryFeeGems !== undefined) return window.GAME_STATE.entryFeeGems;
+    }
+    return 2000;
+  },
+
+  setFees(coins: number, gems: number, isFreeMode: boolean = false, gameOverrides?: Record<string, { coins?: number; gems?: number }>) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('admin_game_fee_coins', String(coins));
+      localStorage.setItem('admin_game_fee_gems', String(gems));
+      localStorage.setItem('admin_free_mode', isFreeMode ? 'true' : 'false');
+      if (gameOverrides) {
+        localStorage.setItem('admin_game_fee_overrides', JSON.stringify(gameOverrides));
+      }
+      if (window.GAME_STATE) {
+        window.GAME_STATE.entryFeeCoins = coins;
+        window.GAME_STATE.entryFeeGems = gems;
+      }
+      window.dispatchEvent(
+        new CustomEvent('admin_fee_updated', {
+          detail: { coins, gems, isFreeMode, gameOverrides },
+        })
+      );
+    }
+  },
 
   setMatchStartListener(fn: (() => void) | null) {
     onMatchStartListener = fn;
@@ -231,20 +321,37 @@ export const GameEconomy = {
    * Validates Balance, Deducts Fee & Launches Active Game
    */
   confirmAndStartGame(paymentType: 'coins' | 'gems'): boolean {
+    const feeCoins = this.getFeeCoins(this.playerState.activeGameTitle);
+    const feeGems = this.getFeeGems(this.playerState.activeGameTitle);
+
+    if (this.isFreeMode() || (paymentType === 'coins' && feeCoins === 0) || (paymentType === 'gems' && feeGems === 0)) {
+      // Free mode - bypass deduction
+      soundFx.playWin();
+      this.closeEntryModal();
+      this.playerState.isMatchInProgress = true;
+      if (typeof (window as any).onPaymentSuccess === 'function') {
+        (window as any).onPaymentSuccess();
+      } else {
+        handlePaymentSuccess();
+      }
+      this.launchGameById(this.playerState.activeGameId);
+      return true;
+    }
+
     if (paymentType === 'coins') {
-      if (this.playerState.coins < this.FEE_COINS) {
+      if (this.playerState.coins < feeCoins) {
         soundFx.playError();
-        this.showInsufficientError('coins', this.FEE_COINS);
+        this.showInsufficientError('coins', feeCoins);
         return false;
       }
-      this.playerState.coins -= this.FEE_COINS;
+      this.playerState.coins -= feeCoins;
     } else if (paymentType === 'gems') {
-      if (this.playerState.gems < this.FEE_GEMS) {
+      if (this.playerState.gems < feeGems) {
         soundFx.playError();
-        this.showInsufficientError('gems', this.FEE_GEMS);
+        this.showInsufficientError('gems', feeGems);
         return false;
       }
-      this.playerState.gems -= this.FEE_GEMS;
+      this.playerState.gems -= feeGems;
     } else {
       alert('Invalid payment type selected.');
       return false;
@@ -267,7 +374,10 @@ export const GameEconomy = {
     return true;
   },
 
-  showInsufficientError(type: 'coins' | 'gems', required: number = 2000) {
+  showInsufficientError(type: 'coins' | 'gems', required?: number) {
+    const feeCoins = required ?? this.getFeeCoins(this.playerState.activeGameTitle);
+    const feeGems = required ?? this.getFeeGems(this.playerState.activeGameTitle);
+
     const entryStep = document.getElementById('entrySelectStep');
     const errorStep = document.getElementById('insufficientStep');
     const titleEl = document.getElementById('insufficientTitle');
@@ -281,12 +391,12 @@ export const GameEconomy = {
     if (type === 'coins') {
       if (titleEl) titleEl.innerText = '🪙 Insufficient Coins!';
       if (msgEl) {
-        msgEl.innerHTML = `Entry costs <strong>2,000 Coins</strong>. You currently have <strong>${this.playerState.coins.toLocaleString()} Coins</strong>.<br><br>Earn coins via daily tasks or spin the wheel!`;
+        msgEl.innerHTML = `Entry costs <strong>${feeCoins.toLocaleString()} Coins</strong>. You currently have <strong>${this.playerState.coins.toLocaleString()} Coins</strong>.<br><br>Earn coins via daily tasks, spin the wheel, or request admin allocation!`;
       }
     } else {
       if (titleEl) titleEl.innerText = '💎 Insufficient Gems!';
       if (msgEl) {
-        msgEl.innerHTML = `Entry costs <strong>2,000 Gems</strong>. You currently have <strong>${this.playerState.gems.toLocaleString()} Gems</strong>.<br><br>Earn gems via daily tasks or spin the wheel!`;
+        msgEl.innerHTML = `Entry costs <strong>${feeGems.toLocaleString()} Gems</strong>. You currently have <strong>${this.playerState.gems.toLocaleString()} Gems</strong>.<br><br>Earn gems via daily tasks, spin the wheel, or request admin allocation!`;
       }
     }
   },
@@ -508,12 +618,16 @@ export function initGlobalGameEntryListeners() {
 /**
  * JavaScript Alert Integration Code for Insufficient Balance checking
  */
-export function checkBalanceAndPlay(currencyType: 'coins' | 'gems'): boolean {
-  if (currencyType === 'coins' && GameEconomy.playerState.coins < 2000) {
+export function checkBalanceAndPlay(currencyType: 'coins' | 'gems', gameTitle?: string): boolean {
+  if (GameEconomy.isFreeMode()) return true;
+  const reqCoins = GameEconomy.getFeeCoins(gameTitle);
+  const reqGems = GameEconomy.getFeeGems(gameTitle);
+
+  if (currencyType === 'coins' && reqCoins > 0 && GameEconomy.playerState.coins < reqCoins) {
     return false;
   }
 
-  if (currencyType === 'gems' && GameEconomy.playerState.gems < 2000) {
+  if (currencyType === 'gems' && reqGems > 0 && GameEconomy.playerState.gems < reqGems) {
     return false;
   }
 

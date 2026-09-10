@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { db, subscribeToActiveGame, switchActiveGame, revokeUserSession, adminUpdateUser, type ActiveGamePlatformState } from '../lib/firebase';
+import { adminAdjustUserBalance } from '../lib/universal_sync_engine';
+import { executeAdminUserAction } from '../lib/master_admin_sync';
 import { 
   collection, 
   query, 
@@ -59,7 +61,7 @@ export function renderProfileCard(userId: string, userData: any) {
   const isMuted = !!userData.isMuted;
 
   panel.innerHTML = `
-    <div style="background:#12121a; border:1px solid #222230; border-radius:10px; padding:18px; margin-top:12px;">
+    <div class="user-item active selected-user" data-user-id="${userId}" style="background:#12121a; border:1px solid #222230; border-radius:12px; padding:18px; margin-top:12px;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
           <h3 style="margin:0; font-family:monospace; color:#fff; font-size:16px;">User: ${username}</h3>
@@ -73,33 +75,66 @@ export function renderProfileCard(userId: string, userData: any) {
       </div>
 
       <div style="margin-top:15px;">
-        <label style="font-size:10px; color:#aaa; font-weight:bold;">ROLE</label>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label style="font-size:10px; color:#aaa; font-weight:bold;">ROLE PERMISSION LEVEL</label>
+          <div style="display:flex; gap:4px;">
+            <button type="button" onclick="window.quickSetRole('${userId}', 'SITE OWNER')" style="background:#a855f7; border:none; color:#fff; font-size:9px; padding:2px 6px; border-radius:3px; cursor:pointer; font-weight:bold;">👑 OWNER</button>
+            <button type="button" onclick="window.quickSetRole('${userId}', 'ADMIN')" style="background:#e11d48; border:none; color:#fff; font-size:9px; padding:2px 6px; border-radius:3px; cursor:pointer; font-weight:bold;">🛡️ ADMIN</button>
+            <button type="button" onclick="window.quickSetRole('${userId}', 'MODERATOR')" style="background:#3b82f6; border:none; color:#fff; font-size:9px; padding:2px 6px; border-radius:3px; cursor:pointer; font-weight:bold;">MOD</button>
+            <button type="button" onclick="window.quickSetRole('${userId}', 'USER')" style="background:#334155; border:none; color:#fff; font-size:9px; padding:2px 6px; border-radius:3px; cursor:pointer; font-weight:bold;">USER</button>
+          </div>
+        </div>
         <select id="roleSelect" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; outline:none; font-family:sans-serif;">
-          <option value="SITE OWNER" ${currentRole === 'SITE OWNER' ? 'selected' : ''}>SITE OWNER</option>
-          <option value="ADMIN" ${currentRole === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
-          <option value="MODERATOR" ${currentRole === 'MODERATOR' ? 'selected' : ''}>MODERATOR</option>
-          <option value="USER" ${currentRole === 'USER' ? 'selected' : ''}>USER</option>
+          <option value="SITE OWNER" ${currentRole === 'SITE OWNER' ? 'selected' : ''}>SITE OWNER (Supreme Control)</option>
+          <option value="ADMIN" ${currentRole === 'ADMIN' ? 'selected' : ''}>ADMIN (Game & User Management)</option>
+          <option value="MODERATOR" ${currentRole === 'MODERATOR' ? 'selected' : ''}>MODERATOR (Chat & Fair Play)</option>
+          <option value="USER" ${currentRole === 'USER' ? 'selected' : ''}>USER (Standard Player)</option>
         </select>
       </div>
 
-      <div style="margin-top:12px;">
-        <label style="font-size:10px; color:#aaa; font-weight:bold;">ADD/DEDUCT GEMS (+/-) [CURRENT: 💎 ${gemsCount.toLocaleString()}]</label>
-        <input type="number" id="gemDelta" name="gem_delta" placeholder="500 or -100" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; box-sizing:border-box; outline:none; font-family:monospace;">
+      <input type="hidden" id="inputTargetUserId" value="${userId}" />
+      <input type="hidden" id="targetUserIdInput" value="${userId}" />
+
+      <div style="margin-top:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label style="font-size:10px; color:#aaa; font-weight:bold;">GEMS BALANCE [💎 ${gemsCount.toLocaleString()}]</label>
+          <div style="display:flex; gap:4px;">
+            <button type="button" onclick="window.quickSetGems('${userId}', 500)" style="background:#1e293b; border:1px solid #475569; color:#f472b6; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">+500</button>
+            <button type="button" onclick="window.quickSetGems('${userId}', 2000)" style="background:#1e293b; border:1px solid #475569; color:#f472b6; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">+2K</button>
+            <button type="button" onclick="window.quickSetGems('${userId}', 10000)" style="background:#1e293b; border:1px solid #475569; color:#f472b6; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">+10K</button>
+            <button type="button" onclick="window.quickSetGems('${userId}', -500)" style="background:#1e293b; border:1px solid #475569; color:#f87171; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">-500</button>
+            <button type="button" onclick="window.quickSetGems('${userId}', -${gemsCount})" style="background:#450a0a; border:1px solid #991b1b; color:#fca5a5; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">WIPE 0</button>
+          </div>
+        </div>
+        <input type="number" id="inputNewGems" data-alias="gemDelta" name="gem_delta" class="user-gems-input" placeholder="Enter +/- amount (e.g. 1000 or -500)" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; box-sizing:border-box; outline:none; font-family:monospace;">
       </div>
 
-      <div style="margin-top:12px;">
-        <label style="font-size:10px; color:#aaa; font-weight:bold;">ADD/DEDUCT COINS (+/-) [CURRENT: 🪙 ${coinsCount.toLocaleString()}]</label>
-        <input type="number" id="coinDelta" name="coin_delta" placeholder="5000 or -1000" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; box-sizing:border-box; outline:none; font-family:monospace;">
+      <div style="margin-top:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label style="font-size:10px; color:#aaa; font-weight:bold;">COINS BALANCE [🪙 ${coinsCount.toLocaleString()}]</label>
+          <div style="display:flex; gap:4px;">
+            <button type="button" onclick="window.quickSetCoins('${userId}', 1000)" style="background:#1e293b; border:1px solid #475569; color:#fbbf24; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">+1K</button>
+            <button type="button" onclick="window.quickSetCoins('${userId}', 10000)" style="background:#1e293b; border:1px solid #475569; color:#fbbf24; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">+10K</button>
+            <button type="button" onclick="window.quickSetCoins('${userId}', 50000)" style="background:#1e293b; border:1px solid #475569; color:#fbbf24; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">+50K</button>
+            <button type="button" onclick="window.quickSetCoins('${userId}', -5000)" style="background:#1e293b; border:1px solid #475569; color:#f87171; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">-5K</button>
+            <button type="button" onclick="window.quickSetCoins('${userId}', -${coinsCount})" style="background:#450a0a; border:1px solid #991b1b; color:#fca5a5; font-size:9px; padding:2px 5px; border-radius:3px; cursor:pointer; font-weight:bold;">WIPE 0</button>
+          </div>
+        </div>
+        <input type="number" id="inputNewCoins" data-alias="coinDelta" name="coin_delta" class="user-coins-input" placeholder="Enter +/- amount (e.g. 50000 or -10000)" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; box-sizing:border-box; outline:none; font-family:monospace;">
       </div>
 
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:18px;">
-        <button onclick="window.saveAdjustments('${userId}')" style="background:#00c853; border:none; padding:10px; font-weight:bold; color:#000; border-radius:4px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">SAVE ADJUSTMENTS</button>
-        <button onclick="window.muteUser('${userId}')" style="background:#ff9100; border:none; padding:10px; font-weight:bold; color:#000; border-radius:4px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">${isMuted ? 'UNMUTE CHAT' : 'MUTE CHAT'}</button>
-        <button onclick="window.kickUser('${userId}')" style="background:#ffab00; border:none; padding:10px; font-weight:bold; color:#000; border-radius:4px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">KICK SESSION</button>
-        <button onclick="window.banUser('${userId}')" style="background:#ff1744; border:none; padding:10px; font-weight:bold; color:#fff; border-radius:4px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">${isBanned ? 'UNBAN USER' : 'PERMANENT BAN'}</button>
+        <button id="btnSaveUserAdjustments" class="btn-save-adjustments" onclick="window.saveAdjustments('${userId}')" style="background:#00c853; border:none; padding:10px; font-weight:bold; color:#000; border-radius:6px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">💾 SAVE ADJUSTMENTS</button>
+        <button id="btnMuteChat" class="btn-mute-chat" onclick="window.muteUser('${userId}')" style="background:${isMuted ? '#4ade80' : '#ff9100'}; border:none; padding:10px; font-weight:bold; color:#000; border-radius:6px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">${isMuted ? '🔊 UNMUTE CHAT' : '🔇 MUTE CHAT'}</button>
+        <button id="btnKickSession" class="btn-kick-session" onclick="window.kickUser('${userId}')" style="background:#ffab00; border:none; padding:10px; font-weight:bold; color:#000; border-radius:6px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">⚡ KICK SESSION</button>
+        <button id="btnPermanentBan" class="btn-permanent-ban" onclick="window.banUser('${userId}')" style="background:${isBanned ? '#3b82f6' : '#ff1744'}; border:none; padding:10px; font-weight:bold; color:#fff; border-radius:6px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">${isBanned ? '🛡️ UNBAN USER' : '⛔ PERMANENT BAN'}</button>
       </div>
     </div>
   `;
+
+  if (typeof (window as any).setupAdminPanelEventListeners === 'function') {
+    (window as any).setupAdminPanelEventListeners();
+  }
 }
 
 // Default fallback permanent accounts if Firestore list is initially pending/empty
@@ -167,6 +202,8 @@ export async function fetchPermanentUsers() {
 
   usersMap.forEach((userData, userId) => {
     const row = document.createElement('div');
+    row.className = 'user-item';
+    row.dataset.userId = userId;
     row.style.cssText = 'padding:8px 12px; background:#14141f; margin:4px 0; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; border:1px solid #222230; transition:all 0.2s;';
     const role = userData.role || 'USER';
     const badgeBg = role === 'SITE OWNER' ? '#a855f7' : role === 'ADMIN' ? '#e11d48' : role === 'MODERATOR' ? '#3b82f6' : '#ff8c00';
@@ -183,7 +220,11 @@ export async function fetchPermanentUsers() {
       </div>
       <span style="background:${badgeBg}; color:#fff; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold;">${role}</span>
     `;
-    row.onclick = () => renderProfileCard(userId, userData);
+    row.onclick = () => {
+      container.querySelectorAll('.user-item').forEach(el => el.classList.remove('active', 'selected-user'));
+      row.classList.add('active', 'selected-user');
+      renderProfileCard(userId, userData);
+    };
     container.appendChild(row);
   });
 }
@@ -259,10 +300,28 @@ export function setupWindowGovernanceHandlers() {
   };
 
   // 5. Governance Action Event Handlers
+  (window as any).quickSetRole = function(userId: string, role: string) {
+    const roleSelect = document.getElementById('roleSelect') as HTMLSelectElement | null;
+    if (roleSelect) roleSelect.value = role;
+    (window as any).saveAdjustments(userId);
+  };
+
+  (window as any).quickSetGems = function(userId: string, delta: number) {
+    const input = document.getElementById('inputNewGems') as HTMLInputElement | null;
+    if (input) input.value = String(delta);
+    (window as any).saveAdjustments(userId);
+  };
+
+  (window as any).quickSetCoins = function(userId: string, delta: number) {
+    const input = document.getElementById('inputNewCoins') as HTMLInputElement | null;
+    if (input) input.value = String(delta);
+    (window as any).saveAdjustments(userId);
+  };
+
   (window as any).saveAdjustments = async function(userId: string) {
     const roleSelect = document.getElementById('roleSelect') as HTMLSelectElement | null;
-    const gemInput = document.getElementById('gemDelta') as HTMLInputElement | null;
-    const coinInput = document.getElementById('coinDelta') as HTMLInputElement | null;
+    const gemInput = (document.getElementById('inputNewGems') || document.getElementById('gemDelta')) as HTMLInputElement | null;
+    const coinInput = (document.getElementById('inputNewCoins') || document.getElementById('coinDelta')) as HTMLInputElement | null;
 
     const newRole = roleSelect?.value || 'USER';
     const gemVal = parseInt(gemInput?.value || '0', 10) || 0;
@@ -280,11 +339,29 @@ export function setupWindowGovernanceHandlers() {
     };
     localUserCache.set(userId, updatedUser);
 
-    // Sync to Firestore
+    // Synchronize to localStorage for active user
+    const currentUsername = localStorage.getItem('chess_pro_username') || '';
+    if (existing.username && (existing.username.toLowerCase() === currentUsername.toLowerCase() || userId === localStorage.getItem('chess_pro_user_id'))) {
+      localStorage.setItem('chess_pro_points', String(updatedCoins));
+      localStorage.setItem('chess_pro_gems', String(updatedGems));
+      localStorage.setItem('chess_pro_role', newRole);
+      if (newRole === 'SITE OWNER') {
+        localStorage.setItem('chess_pro_is_owner', 'true');
+        localStorage.setItem('chess_owner_verified', 'true');
+      }
+    }
+
+    // Sync via Universal Sync Engine & Master Admin Sync directly to Firestore
     try {
-      const updates: Record<string, any> = { role: newRole };
-      if (gemVal !== 0) updates.gems = increment(gemVal);
-      if (coinVal !== 0) updates.coins = increment(coinVal);
+      await executeAdminUserAction(userId, { role: newRole, coins: updatedCoins, gems: updatedGems });
+      await adminAdjustUserBalance(userId, updatedCoins, updatedGems);
+    } catch (e) {
+      console.warn('universal_sync_engine balance update error:', e);
+    }
+
+    // Sync to Firestore role
+    try {
+      const updates: Record<string, any> = { role: newRole, coins: updatedCoins, gems: updatedGems };
       await setDoc(doc(db, 'users', userId), updates, { merge: true });
     } catch (err) {
       console.warn('Notice: Firestore save deferred (offline mode):', err);
@@ -302,7 +379,10 @@ export function setupWindowGovernanceHandlers() {
       console.warn('Backend adjust warning:', e);
     }
 
-    alert('Adjustments saved successfully!');
+    window.dispatchEvent(new CustomEvent('admin_user_governance_event', {
+      detail: { userId, username: existing.username, role: newRole, coins: updatedCoins, gems: updatedGems }
+    }));
+
     renderProfileCard(userId, updatedUser);
     fetchPermanentUsers();
   };
@@ -316,6 +396,12 @@ export function setupWindowGovernanceHandlers() {
 
     existing.isBanned = nextBanStatus;
     localUserCache.set(userId, existing);
+
+    // Synchronize to localStorage
+    if (existing.username) {
+      localStorage.setItem(`user_banned_${existing.username.toLowerCase()}`, nextBanStatus ? 'true' : 'false');
+    }
+    localStorage.setItem(`user_banned_${userId}`, nextBanStatus ? 'true' : 'false');
 
     try {
       await setDoc(doc(db, 'users', userId), { isBanned: nextBanStatus }, { merge: true });
@@ -337,12 +423,24 @@ export function setupWindowGovernanceHandlers() {
       console.warn('Backend ban warning:', e);
     }
 
-    alert(`User ${nextBanStatus ? 'permanently banned' : 'unbanned'}.`);
+    window.dispatchEvent(new CustomEvent('admin_user_governance_event', {
+      detail: { userId, username: existing.username, isBanned: nextBanStatus }
+    }));
+
+    alert(`User ${nextBanStatus ? 'PERMANENTLY BANNED' : 'UNBANNED'}. Access gates enforced.`);
     renderProfileCard(userId, existing);
     fetchPermanentUsers();
   };
 
   (window as any).kickUser = async function(userId: string) {
+    const existing = localUserCache.get(userId) || {};
+    if (!confirm(`Forcibly terminate session and kick "${existing.username || userId}" immediately?`)) return;
+
+    localStorage.setItem(`user_kicked_${userId}`, String(Date.now()));
+    if (existing.username) {
+      localStorage.setItem(`user_kicked_${existing.username.toLowerCase()}`, String(Date.now()));
+    }
+
     try {
       await setDoc(doc(db, 'users', userId), { sessionRevokedAt: serverTimestamp() }, { merge: true });
     } catch (err) {
@@ -360,7 +458,11 @@ export function setupWindowGovernanceHandlers() {
       console.warn('Backend kick warning:', e);
     }
 
-    alert('User active session revoked.');
+    window.dispatchEvent(new CustomEvent('admin_user_governance_event', {
+      detail: { userId, username: existing.username, kicked: true }
+    }));
+
+    alert('User active session revoked immediately.');
   };
 
   (window as any).muteUser = async function(userId: string) {
@@ -369,6 +471,12 @@ export function setupWindowGovernanceHandlers() {
 
     existing.isMuted = nextMuteStatus;
     localUserCache.set(userId, existing);
+
+    // Synchronize to localStorage for instant client-side chat moderation
+    if (existing.username) {
+      localStorage.setItem(`user_muted_${existing.username.toLowerCase()}`, nextMuteStatus ? 'true' : 'false');
+    }
+    localStorage.setItem(`user_muted_${userId}`, nextMuteStatus ? 'true' : 'false');
 
     try {
       await setDoc(doc(db, 'users', userId), { isMuted: nextMuteStatus }, { merge: true });
@@ -386,7 +494,11 @@ export function setupWindowGovernanceHandlers() {
       console.warn('Backend mute warning:', e);
     }
 
-    alert(`User chat access ${nextMuteStatus ? 'muted' : 'unmuted'}.`);
+    window.dispatchEvent(new CustomEvent('admin_user_governance_event', {
+      detail: { userId, username: existing.username, isMuted: nextMuteStatus }
+    }));
+
+    alert(`User chat access ${nextMuteStatus ? 'MUTED' : 'UNMUTED'}.`);
     renderProfileCard(userId, existing);
     fetchPermanentUsers();
   };

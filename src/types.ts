@@ -66,6 +66,7 @@ export interface UserSession {
   maskedHighEntropyToken?: string;
   guestExpiresAt?: number;
   gamerPoints?: number;
+  gems?: number;
   stats?: UserStats;
 }
 

@@ -85,6 +85,11 @@ import { GlobalAnalyticsDashboardModal } from './components/telemetry/GlobalAnal
 import { GoogleConnectModal } from './components/GoogleConnectModal';
 import { GoogleFormsModal } from './components/GoogleFormsModal';
 import { FloatingSuiteAndTelemetryMenu } from './components/FloatingSuiteAndTelemetryMenu';
+import { CosmeticsShopModal } from './components/CosmeticsShopModal';
+import { DailyStreakModal } from './components/DailyStreakModal';
+import { FriendsModal } from './components/FriendsModal';
+import { RankedLadderModal } from './components/RankedLadderModal';
+import { InGameReactionsBar } from './components/InGameReactionsBar';
 
 import { OwnerHeroCard } from './components/OwnerHeroCard';
 import { ChooseModePanel } from './components/ChooseModePanel';
@@ -254,6 +259,10 @@ export default function App() {
   const [isDailyWheelOpen, setIsDailyWheelOpen] = useState<boolean>(false);
   const [isCoinHistoryModalOpen, setIsCoinHistoryModalOpen] = useState<boolean>(false);
   const [isExchangeModalOpen, setIsExchangeModalOpen] = useState<boolean>(false);
+  const [isCosmeticsShopOpen, setIsCosmeticsShopOpen] = useState<boolean>(false);
+  const [isDailyStreakOpen, setIsDailyStreakOpen] = useState<boolean>(false);
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState<boolean>(false);
+  const [isRankedLadderOpen, setIsRankedLadderOpen] = useState<boolean>(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
   const [isOwnerVerifyOpen, setIsOwnerVerifyOpen] = useState<boolean>(false);
   const [exchangeDirection, setExchangeDirection] = useState<'gemToCoin' | 'coinToGem'>('gemToCoin');
@@ -1519,6 +1528,10 @@ export default function App() {
         onOpenAnimationHub={() => setIsMasterHubOpen(true)}
         onOpenDailyWheel={() => setIsDailyWheelOpen(true)}
         onOpenCoinHistory={() => setIsCoinHistoryModalOpen(true)}
+        onOpenCosmeticsShop={() => setIsCosmeticsShopOpen(true)}
+        onOpenDailyStreak={() => setIsDailyStreakOpen(true)}
+        onOpenFriends={() => setIsFriendsModalOpen(true)}
+        onOpenRankedLadder={() => setIsRankedLadderOpen(true)}
         onOpenExchange={(dir) => {
           setExchangeDirection(dir || 'gemToCoin');
           setIsExchangeModalOpen(true);
@@ -2105,6 +2118,25 @@ export default function App() {
             </button>
           </div>
 
+          {/* Real-time In-Game Reactions & Taunts Bar */}
+          <div className="w-full max-w-[580px] flex items-center justify-between px-1 mt-1">
+            <InGameReactionsBar />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsCosmeticsShopOpen(true)}
+                className="text-[11px] font-mono text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded-lg transition"
+              >
+                🛍️ Cosmetics
+              </button>
+              <button
+                onClick={() => setIsRankedLadderOpen(true)}
+                className="text-[11px] font-mono text-yellow-400 hover:text-yellow-300 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 px-2 py-0.5 rounded-lg transition"
+              >
+                👑 Ranked
+              </button>
+            </div>
+          </div>
+
           {/* Dynamic Player Status Cards & Adaptive Control Deck */}
           <div className="w-full max-w-[580px] mt-2">
             <PlayerStatusCardDeck
@@ -2231,6 +2263,61 @@ export default function App() {
             setIsReferModalOpen(true);
           }}
         />
+
+        {/* Progression, Shop, Streaks & Social Hub Grid */}
+        <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Cosmetics Emporium */}
+          <div 
+            onClick={() => setIsCosmeticsShopOpen(true)}
+            className="p-4 rounded-2xl bg-[#080d1a]/90 hover:bg-slate-900 border border-amber-500/30 hover:border-amber-400/70 cursor-pointer transition-all duration-200 transform hover:-translate-y-1 shadow-lg shadow-amber-950/20 group relative overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-lg">🛍️</span>
+              <span className="text-[9px] font-mono font-black uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">SHOP</span>
+            </div>
+            <h4 className="text-sm font-black text-white group-hover:text-amber-300 transition-colors">Cosmetics Emporium</h4>
+            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">Equip custom dice sets, vibrant board styles & trails using Coins & Gems</p>
+          </div>
+
+          {/* 7-Day Login Streak */}
+          <div 
+            onClick={() => setIsDailyStreakOpen(true)}
+            className="p-4 rounded-2xl bg-[#080d1a]/90 hover:bg-slate-900 border border-orange-500/30 hover:border-orange-400/70 cursor-pointer transition-all duration-200 transform hover:-translate-y-1 shadow-lg shadow-orange-950/20 group relative overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="w-9 h-9 rounded-xl bg-orange-500/20 border border-orange-400/40 flex items-center justify-center text-lg">🔥</span>
+              <span className="text-[9px] font-mono font-black uppercase px-2 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-400/30">STREAK</span>
+            </div>
+            <h4 className="text-sm font-black text-white group-hover:text-orange-300 transition-colors">7-Day Login Streak</h4>
+            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">Log in daily to claim escalating coin bonuses and the Day 7 Mythic Chest</p>
+          </div>
+
+          {/* Friends & 1v1 Arena */}
+          <div 
+            onClick={() => setIsFriendsModalOpen(true)}
+            className="p-4 rounded-2xl bg-[#080d1a]/90 hover:bg-slate-900 border border-sky-500/30 hover:border-sky-400/70 cursor-pointer transition-all duration-200 transform hover:-translate-y-1 shadow-lg shadow-sky-950/20 group relative overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-lg">👥</span>
+              <span className="text-[9px] font-mono font-black uppercase px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30">SOCIAL</span>
+            </div>
+            <h4 className="text-sm font-black text-white group-hover:text-sky-300 transition-colors">Friends & 1v1 Arena</h4>
+            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">Add buddies, monitor live game status, and initiate direct 1v1 challenges</p>
+          </div>
+
+          {/* Ranked Ladder & RP Division */}
+          <div 
+            onClick={() => setIsRankedLadderOpen(true)}
+            className="p-4 rounded-2xl bg-[#080d1a]/90 hover:bg-slate-900 border border-yellow-500/30 hover:border-yellow-400/70 cursor-pointer transition-all duration-200 transform hover:-translate-y-1 shadow-lg shadow-yellow-950/20 group relative overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="w-9 h-9 rounded-xl bg-yellow-500/20 border border-yellow-400/40 flex items-center justify-center text-lg">👑</span>
+              <span className="text-[9px] font-mono font-black uppercase px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-400/30">SEASON 4</span>
+            </div>
+            <h4 className="text-sm font-black text-white group-hover:text-yellow-300 transition-colors">Ranked RP Divisions</h4>
+            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">Ascend Bronze through Grandmaster, earn division trophies and season rewards</p>
+          </div>
+        </div>
 
         {/* Explore All 20 Playable Arena Games */}
         <ExploreGamesGrid
@@ -2819,6 +2906,60 @@ export default function App() {
         isOpen={isAdminPanelOpen}
         onClose={() => setIsAdminPanelOpen(false)}
         currentUsername={currentUser?.username}
+      />
+
+      {/* Cosmetics & Theme Emporium Modal */}
+      <CosmeticsShopModal
+        isOpen={isCosmeticsShopOpen}
+        onClose={() => setIsCosmeticsShopOpen(false)}
+        onEquip={() => {
+          if (currentUser) {
+            setCurrentUser({
+              ...currentUser,
+              gamerPoints: getUserPoints(),
+              gems: getUserGems(),
+            });
+          }
+        }}
+      />
+
+      {/* 7-Day Login Streak Rewards Modal */}
+      <DailyStreakModal
+        isOpen={isDailyStreakOpen}
+        onClose={() => setIsDailyStreakOpen(false)}
+        onClaim={(coins, gems) => {
+          if (currentUser) {
+            setCurrentUser({
+              ...currentUser,
+              gamerPoints: getUserPoints(),
+              gems: getUserGems(),
+            });
+          }
+        }}
+      />
+
+      {/* Friends & 1v1 Social Challenges Modal */}
+      <FriendsModal
+        isOpen={isFriendsModalOpen}
+        onClose={() => setIsFriendsModalOpen(false)}
+        onChallengeFriend={(friend, game) => {
+          setIsFriendsModalOpen(false);
+          setActiveBoardGame(game as any);
+          setGameMode('pvp');
+          resetGame();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+
+      {/* Ranked Competitive Ladder & RP Divisions Modal */}
+      <RankedLadderModal
+        isOpen={isRankedLadderOpen}
+        onClose={() => setIsRankedLadderOpen(false)}
+        onPlayRanked={() => {
+          setIsRankedLadderOpen(false);
+          setGameMode('pvp');
+          setIsMatchmakingOpen(true);
+        }}
       />
 
       {/* Refer and Earn Rewards Modal */}

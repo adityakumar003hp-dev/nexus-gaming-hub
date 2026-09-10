@@ -29,6 +29,10 @@ import {
   ArrowLeftRight,
   FileText,
   Coins,
+  ShoppingBag,
+  Award,
+  Crown,
+  Dice5,
 } from 'lucide-react';
 import { GameMode, UserSession, ActiveBoardGame } from '../types';
 import { isSiteOwner } from '../utils/owner';
@@ -60,6 +64,10 @@ interface GameHeaderProps {
   onOpenDailyWheel?: () => void;
   onOpenExchange?: (direction?: 'gemToCoin' | 'coinToGem') => void;
   onOpenCoinHistory?: () => void;
+  onOpenCosmeticsShop?: () => void;
+  onOpenDailyStreak?: () => void;
+  onOpenFriends?: () => void;
+  onOpenRankedLadder?: () => void;
   onOpenAdminPanel?: () => void;
   onOpenPuzzles?: () => void;
   onOpenPositionEditor?: () => void;
@@ -316,6 +324,10 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
   onOpenDailyWheel,
   onOpenExchange,
   onOpenCoinHistory,
+  onOpenCosmeticsShop,
+  onOpenDailyStreak,
+  onOpenFriends,
+  onOpenRankedLadder,
   onOpenAdminPanel,
   onOpenPuzzles,
   onOpenPositionEditor,
@@ -478,7 +490,7 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
             </div>
             <div className="flex flex-col items-start leading-none text-left">
               <span id="playerCoins" className="font-mono text-xs sm:text-sm font-black text-amber-300 tracking-wide">
-                🪙 {userCoins.toLocaleString()}
+                🪙 <span id="userCoinsDisplay">{userCoins.toLocaleString()}</span>
               </span>
               <span className="text-[8px] font-black text-amber-400/90 tracking-widest uppercase">
                 COINS
@@ -512,7 +524,7 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
             </div>
             <div className="flex flex-col items-start leading-none text-left">
               <span id="playerGems" className="font-mono text-xs sm:text-sm font-black text-fuchsia-300 tracking-wide">
-                💎 {userGems.toLocaleString()}
+                💎 <span id="userGemsDisplay">{userGems.toLocaleString()}</span>
               </span>
               <span className="text-[8px] font-black text-fuchsia-400/90 tracking-widest uppercase">
                 GEMS
@@ -697,6 +709,82 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
                     </div>
                   </button>
 
+                  {/* Cosmetics & Theme Emporium */}
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      if (onOpenCosmeticsShop) onOpenCosmeticsShop();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-bold text-amber-300 hover:bg-amber-500/10 hover:text-white transition border border-transparent hover:border-amber-500/30"
+                    id="menu-btn-cosmetics-shop"
+                  >
+                    <ShoppingBag className="w-4 h-4 text-amber-400" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span>Cosmetics &amp; Theme Shop</span>
+                        <span className="text-[9px] bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 px-1 py-0.2 rounded font-mono font-black">SHOP</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-normal">Custom dice skins, boards &amp; trails</div>
+                    </div>
+                  </button>
+
+                  {/* 7-Day Login Streak */}
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      if (onOpenDailyStreak) onOpenDailyStreak();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-bold text-orange-300 hover:bg-orange-500/10 hover:text-white transition border border-transparent hover:border-orange-500/30"
+                    id="menu-btn-daily-streak"
+                  >
+                    <Flame className="w-4 h-4 text-orange-400" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span>7-Day Login Streak</span>
+                        <span className="text-[9px] bg-orange-500/20 text-orange-300 px-1 py-0.2 rounded font-mono font-bold">STREAK</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-normal">Claim daily rewards &amp; Day 7 mythic chest</div>
+                    </div>
+                  </button>
+
+                  {/* Friends & 1v1 Challenges */}
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      if (onOpenFriends) onOpenFriends();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-bold text-sky-300 hover:bg-sky-500/10 hover:text-white transition border border-transparent hover:border-sky-500/30"
+                    id="menu-btn-friends"
+                  >
+                    <Users className="w-4 h-4 text-sky-400" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span>Friends &amp; 1v1 Challenges</span>
+                        <span className="text-[9px] bg-sky-500/20 text-sky-300 px-1 py-0.2 rounded font-mono font-bold">SOCIAL</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-normal">Live status &amp; direct game challenges</div>
+                    </div>
+                  </button>
+
+                  {/* Ranked Ladder */}
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      if (onOpenRankedLadder) onOpenRankedLadder();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-bold text-yellow-300 hover:bg-yellow-500/10 hover:text-white transition border border-transparent hover:border-yellow-500/30"
+                    id="menu-btn-ranked-ladder"
+                  >
+                    <Crown className="w-4 h-4 text-yellow-400" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span>Ranked Competitive Ladder</span>
+                        <span className="text-[9px] bg-yellow-500/20 text-yellow-300 px-1 py-0.2 rounded font-mono font-bold">SEASON 4</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-normal">Ascend tiers Bronze to Grandmaster</div>
+                    </div>
+                  </button>
+
                   {/* Google Forms Suite */}
                   <button
                     onClick={() => {
@@ -783,6 +871,54 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
             >
               <Trophy className="w-4 h-4" />
             </button>
+
+            {/* Cosmetics & Theme Shop */}
+            {onOpenCosmeticsShop && (
+              <button
+                onClick={onOpenCosmeticsShop}
+                className="p-1.5 rounded-lg text-amber-300 hover:text-white hover:bg-amber-950/50 transition"
+                title="Cosmetics & Theme Shop (Dice & Boards)"
+                id="header-cosmetics-btn"
+              >
+                <ShoppingBag className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* 7-Day Login Streak */}
+            {onOpenDailyStreak && (
+              <button
+                onClick={onOpenDailyStreak}
+                className="p-1.5 rounded-lg text-orange-400 hover:text-white hover:bg-orange-950/50 transition"
+                title="7-Day Login Streak Rewards"
+                id="header-daily-streak-btn"
+              >
+                <Flame className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Friends & 1v1 Challenges */}
+            {onOpenFriends && (
+              <button
+                onClick={onOpenFriends}
+                className="p-1.5 rounded-lg text-sky-400 hover:text-white hover:bg-sky-950/50 transition"
+                title="Friends & 1v1 Challenges"
+                id="header-friends-btn"
+              >
+                <Users className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Ranked Ladder */}
+            {onOpenRankedLadder && (
+              <button
+                onClick={onOpenRankedLadder}
+                className="p-1.5 rounded-lg text-yellow-400 hover:text-white hover:bg-yellow-950/50 transition"
+                title="Ranked Competitive Division Ladder"
+                id="header-ranked-ladder-btn"
+              >
+                <Crown className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Sound Toggle */}
             <button
