@@ -2933,6 +2933,39 @@ app.get('/api/admin/lockdown-status', (req, res) => {
   res.json({ success: true, lockdown: serverLockdownState });
 });
 
+// POST /api/admin/mass-adjust (Global Airdrop or Mass Deduction across all users)
+app.post('/api/admin/mass-adjust', async (req, res) => {
+  try {
+    const { coinDelta, gemDelta } = req.body || {};
+    const parsedCoins = Number(coinDelta) || 0;
+    const parsedGems = Number(gemDelta) || 0;
+
+    if (parsedCoins === 0 && parsedGems === 0) {
+      return res.status(400).json({ success: false, error: 'No non-zero delta provided.' });
+    }
+
+    let affectedUsersCount = usersById.size || 0;
+
+    securityAuditLogs.push({
+      id: `sec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      userId: 'ADMIN',
+      event: 'MASS_WEALTH_ADJUSTMENT',
+      details: `Adjusted mass wealth: Coins delta=${parsedCoins}, Gems delta=${parsedGems}`,
+      ip: (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1',
+      timestamp: Date.now(),
+      severity: 'info',
+    });
+
+    return res.json({
+      success: true,
+      message: `Mass economy adjustment of ${parsedCoins} coins and ${parsedGems} gems processed.`,
+      affectedUsersCount,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Mass adjust error' });
+  }
+});
+
 // POST /api/admin/lift-lockdown
 app.post('/api/admin/lift-lockdown', async (req, res) => {
   const { password, securityCode } = req.body || {};

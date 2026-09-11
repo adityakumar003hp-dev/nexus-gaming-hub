@@ -11,7 +11,9 @@ import {
   updateDoc, 
   addDoc, 
   collection, 
-  onSnapshot 
+  onSnapshot,
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
 
 export interface AdminSyncState {
@@ -37,6 +39,7 @@ declare global {
   interface Window {
     ADMIN_SYNC_STATE?: AdminSyncState;
     executeAdminUserAction?: (targetUserId: string, actionData: Record<string, any>) => Promise<void>;
+    executeAdminMassWealthAdjustment?: (coinDelta: number, gemDelta: number) => Promise<{ success: boolean; count: number }>;
     saveEconomySettings?: (coinsFee: number | string, gemsFee: number | string, exchangeRate: number | string, jackpotPool: number | string) => Promise<void>;
     saveModerationSettings?: (broadcastText: string, cooldownSeconds: number | string, isFilterOn: boolean) => Promise<void>;
     createGlobalTournament?: (tournamentPayload: any) => Promise<void>;
@@ -100,6 +103,55 @@ export async function executeAdminUserAction(targetUserId: string, actionData: R
       alert(`❌ Failed to update user: ${err?.message || err}`);
     }
   }
+}
+
+/**
+ * A2. MASS WEALTH ADJUSTMENT (Give or Deduct Money to/from Everyone)
+ */
+export async function executeAdminMassWealthAdjustment(coinDelta: number, gemDelta: number): Promise<{ success: boolean; count: number }> {
+  try {
+    const usersCollection = collection(db, "users");
+    const snapshot = await getDocs(usersCollection);
+    const batch = writeBatch(db);
+    let count = 0;
+
+    snapshot.forEach((userDoc) => {
+      const data = userDoc.data();
+      const curCoins = typeof data.coins === 'number' ? data.coins : 0;
+      const curGems = typeof data.gems === 'number' ? data.gems : 0;
+      const nextCoins = Math.max(0, curCoins + coinDelta);
+      const nextGems = Math.max(0, curGems + gemDelta);
+
+      batch.set(doc(db, "users", userDoc.id), {
+        coins: nextCoins,
+        gems: nextGems,
+        lastMassWealthUpdateAt: new Date().toISOString(),
+        updatedBy: auth.currentUser ? auth.currentUser.uid : "ADMIN"
+      }, { merge: true });
+      count++;
+    });
+
+    if (count > 0) {
+      await batch.commit();
+    }
+
+    // Local notifications
+    if (coinDelta !== 0) {
+      window.dispatchEvent(new CustomEvent('chess_points_updated', { detail: { delta: coinDelta } }));
+    }
+    if (gemDelta !== 0) {
+      window.dispatchEvent(new CustomEvent('chess_gems_updated', { detail: { delta: gemDelta } }));
+    }
+
+    return { success: true, count };
+  } catch (err: any) {
+    console.error("Mass Wealth Adjustment Error:", err);
+    throw err;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.executeAdminMassWealthAdjustment = executeAdminMassWealthAdjustment;
 }
 
 /**

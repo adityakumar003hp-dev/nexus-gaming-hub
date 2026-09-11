@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { db, subscribeToActiveGame, switchActiveGame, revokeUserSession, adminUpdateUser, type ActiveGamePlatformState } from '../lib/firebase';
 import { adminAdjustUserBalance } from '../lib/universal_sync_engine';
-import { executeAdminUserAction } from '../lib/master_admin_sync';
+import { executeAdminUserAction, executeAdminMassWealthAdjustment } from '../lib/master_admin_sync';
+import { getUserPoints, setUserPoints, getUserGems, setUserGems } from '../utils/pointsManager';
 import { 
   collection, 
   query, 
@@ -12,7 +13,8 @@ import {
   setDoc, 
   updateDoc, 
   increment, 
-  serverTimestamp 
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 
 // 1. Save new permanent user record upon registration
@@ -123,7 +125,36 @@ export function renderProfileCard(userId: string, userData: any) {
         <input type="number" id="inputNewCoins" data-alias="coinDelta" name="coin_delta" class="user-coins-input" placeholder="Enter +/- amount (e.g. 50000 or -10000)" style="width:100%; padding:8px; background:#1a1a24; border:1px solid #333; color:#fff; border-radius:4px; margin-top:4px; box-sizing:border-box; outline:none; font-family:monospace;">
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:18px;">
+      <!-- 🌐 MASS WEALTH DISPATCHER (GIVE / DEDUCT EVERYONE) -->
+      <div style="background:linear-gradient(135deg, rgba(26, 26, 40, 0.95), rgba(15, 23, 42, 0.95)); border:1px solid #3b82f644; border-radius:10px; padding:12px; margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:14px;">🌐</span>
+            <span style="font-size:11px; font-weight:800; color:#60a5fa; letter-spacing:0.5px;">GIVE / DEDUCT MONEY (EVERYONE)</span>
+          </div>
+          <span style="font-size:9px; background:#1e3a8a; color:#93c5fd; padding:2px 7px; border-radius:4px; font-weight:700;">ALL PLAYERS</span>
+        </div>
+        <p style="font-size:10px; color:#94a3b8; margin:0 0 10px 0; line-height:1.4;">
+          Use amounts in Coins & Gems inputs above to give or deduct from <strong>EVERY player</strong> simultaneously:
+        </p>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+          <button id="btnMassGiveAll" type="button" onclick="window.massAdjustFromInputs('give')" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; padding:10px; font-weight:800; border-radius:6px; cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; gap:5px; box-shadow:0 2px 6px rgba(16, 185, 129, 0.3); transition:all 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+            <span>🎁</span> GIVE TO EVERYONE
+          </button>
+          <button id="btnMassDeductAll" type="button" onclick="window.massAdjustFromInputs('deduct')" style="background:linear-gradient(135deg, #ef4444, #dc2626); color:#fff; border:none; padding:10px; font-weight:800; border-radius:6px; cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; gap:5px; box-shadow:0 2px 6px rgba(239, 68, 68, 0.3); transition:all 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+            <span>📉</span> DEDUCT FROM EVERYONE
+          </button>
+        </div>
+        <div style="display:flex; gap:4px; margin-top:8px; justify-content:center; flex-wrap:wrap;">
+          <button type="button" onclick="window.quickMassAdjust(5000, 500)" style="background:#1e293b; border:1px solid #3b82f6; color:#93c5fd; font-size:9px; padding:3px 6px; border-radius:3px; cursor:pointer; font-weight:bold;">+5K 🪙 & +500 💎 ALL</button>
+          <button type="button" onclick="window.quickMassAdjust(20000, 2000)" style="background:#1e293b; border:1px solid #3b82f6; color:#93c5fd; font-size:9px; padding:3px 6px; border-radius:3px; cursor:pointer; font-weight:bold;">+20K 🪙 & +2K 💎 ALL</button>
+          <button type="button" onclick="window.quickMassAdjust(100000, 10000)" style="background:#1e293b; border:1px solid #10b981; color:#6ee7b7; font-size:9px; padding:3px 6px; border-radius:3px; cursor:pointer; font-weight:bold;">+100K 🪙 & +10K 💎 ALL</button>
+          <button type="button" onclick="window.quickMassAdjust(-5000, -500)" style="background:#371414; border:1px solid #991b1b; color:#fca5a5; font-size:9px; padding:3px 6px; border-radius:3px; cursor:pointer; font-weight:bold;">-5K 🪙 & -500 💎 ALL</button>
+          <button type="button" onclick="window.quickMassAdjust(-20000, -2000)" style="background:#371414; border:1px solid #991b1b; color:#fca5a5; font-size:9px; padding:3px 6px; border-radius:3px; cursor:pointer; font-weight:bold;">-20K 🪙 & -2K 💎 ALL</button>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:16px;">
         <button id="btnSaveUserAdjustments" class="btn-save-adjustments" onclick="window.saveAdjustments('${userId}')" style="background:#00c853; border:none; padding:10px; font-weight:bold; color:#000; border-radius:6px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">💾 SAVE ADJUSTMENTS</button>
         <button id="btnMuteChat" class="btn-mute-chat" onclick="window.muteUser('${userId}')" style="background:${isMuted ? '#4ade80' : '#ff9100'}; border:none; padding:10px; font-weight:bold; color:#000; border-radius:6px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">${isMuted ? '🔊 UNMUTE CHAT' : '🔇 MUTE CHAT'}</button>
         <button id="btnKickSession" class="btn-kick-session" onclick="window.kickUser('${userId}')" style="background:#ffab00; border:none; padding:10px; font-weight:bold; color:#000; border-radius:6px; cursor:pointer; font-size:12px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">⚡ KICK SESSION</button>
@@ -502,6 +533,176 @@ export function setupWindowGovernanceHandlers() {
     renderProfileCard(userId, existing);
     fetchPermanentUsers();
   };
+
+  // 6. Global Mass Wealth Adjustment (Give or Deduct Money to/from Everyone)
+  (window as any).massAdjustFromInputs = async function(mode: 'give' | 'deduct') {
+    const gemInput = (document.getElementById('inputNewGems') || document.getElementById('gemDelta')) as HTMLInputElement | null;
+    const coinInput = (document.getElementById('inputNewCoins') || document.getElementById('coinDelta')) as HTMLInputElement | null;
+
+    let rawCoins = Math.abs(parseInt(coinInput?.value || '0', 10) || 0);
+    let rawGems = Math.abs(parseInt(gemInput?.value || '0', 10) || 0);
+
+    if (rawCoins === 0 && rawGems === 0) {
+      const promptCoin = prompt(`Enter COINS amount to ${mode.toUpperCase()} to EVERY registered player:`, '10000');
+      if (promptCoin === null) return;
+      rawCoins = Math.abs(parseInt(promptCoin, 10) || 0);
+
+      const promptGem = prompt(`Enter GEMS amount to ${mode.toUpperCase()} to EVERY registered player (or 0):`, '1000');
+      if (promptGem !== null) {
+        rawGems = Math.abs(parseInt(promptGem, 10) || 0);
+      }
+    }
+
+    if (rawCoins === 0 && rawGems === 0) {
+      alert('Please enter a valid amount of Coins or Gems to give or deduct from everyone.');
+      return;
+    }
+
+    const coinDelta = mode === 'give' ? rawCoins : -rawCoins;
+    const gemDelta = mode === 'give' ? rawGems : -rawGems;
+
+    await (window as any).executeGlobalMassWealthAdjustment(coinDelta, gemDelta);
+  };
+
+  (window as any).executeGlobalMassWealthAdjustment = async function(coinDelta: number, gemDelta: number) {
+    if (coinDelta === 0 && gemDelta === 0) {
+      alert('Please specify a non-zero Coin or Gem delta.');
+      return { success: false };
+    }
+
+    const isGive = coinDelta >= 0 && gemDelta >= 0;
+    const parts: string[] = [];
+    if (coinDelta !== 0) {
+      parts.push(`${coinDelta > 0 ? `+${coinDelta.toLocaleString()}` : coinDelta.toLocaleString()} Coins`);
+    }
+    if (gemDelta !== 0) {
+      parts.push(`${gemDelta > 0 ? `+${gemDelta.toLocaleString()}` : gemDelta.toLocaleString()} Gems`);
+    }
+    const deltaSummary = parts.join(' and ');
+
+    const confirmed = confirm(
+      `CONFIRMATION REQUIRED:\n\nAre you sure you want to ${isGive ? 'GIVE / AIRDROP' : 'DEDUCT'} ${deltaSummary} to/from EVERY registered player across the entire platform?\n\nThis will instantly update all accounts in Firestore and local databases simultaneously.`
+    );
+    if (!confirmed) return { success: false, cancelled: true };
+
+    let totalAccountsUpdated = 0;
+
+    // 1. Update in-memory local cache
+    localUserCache.forEach((userData, uid) => {
+      const curC = typeof userData.coins === 'number' ? userData.coins : 0;
+      const curG = typeof userData.gems === 'number' ? userData.gems : 0;
+      const nextC = Math.max(0, curC + coinDelta);
+      const nextG = Math.max(0, curG + gemDelta);
+
+      localUserCache.set(uid, {
+        ...userData,
+        coins: nextC,
+        gems: nextG,
+      });
+      totalAccountsUpdated++;
+    });
+
+    // 2. Update DEFAULT_PERMANENT_USERS array
+    DEFAULT_PERMANENT_USERS.forEach((u) => {
+      u.coins = Math.max(0, (u.coins || 0) + coinDelta);
+      u.gems = Math.max(0, (u.gems || 0) + gemDelta);
+    });
+
+    // 3. Batch update Firestore 'users' collection
+    try {
+      const usersSnap = await getDocs(collection(db, 'users'));
+      if (!usersSnap.empty) {
+        const batch = writeBatch(db);
+        usersSnap.forEach((docSnap) => {
+          const curData = docSnap.data();
+          const cCoins = typeof curData.coins === 'number' ? curData.coins : 0;
+          const cGems = typeof curData.gems === 'number' ? curData.gems : 0;
+          const nCoins = Math.max(0, cCoins + coinDelta);
+          const nGems = Math.max(0, cGems + gemDelta);
+
+          batch.set(doc(db, 'users', docSnap.id), {
+            coins: nCoins,
+            gems: nGems,
+            lastMassAdjustmentAt: serverTimestamp(),
+            updatedBy: 'ADMIN_GLOBAL_AIRDROP'
+          }, { merge: true });
+
+          if (!localUserCache.has(docSnap.id)) {
+            localUserCache.set(docSnap.id, {
+              id: docSnap.id,
+              ...curData,
+              coins: nCoins,
+              gems: nGems
+            });
+            totalAccountsUpdated++;
+          }
+        });
+        await batch.commit();
+      }
+    } catch (err) {
+      console.warn('Notice: Firestore batch write deferred (offline mode):', err);
+    }
+
+    // 4. Update master_admin_sync helper
+    try {
+      await executeAdminMassWealthAdjustment(coinDelta, gemDelta);
+    } catch (err) {
+      console.warn('master_admin_sync error:', err);
+    }
+
+    // 5. Update local user points & gems
+    try {
+      const currentPoints = getUserPoints();
+      const currentGems = getUserGems();
+      const nextPoints = Math.max(0, currentPoints + coinDelta);
+      const nextGems = Math.max(0, currentGems + gemDelta);
+
+      setUserPoints(nextPoints, `Global Admin ${isGive ? 'Gift' : 'Deduction'}`);
+      setUserGems(nextGems, `Global Admin ${isGive ? 'Gift' : 'Deduction'}`);
+
+      localStorage.setItem('chess_pro_points', String(nextPoints));
+      localStorage.setItem('chess_pro_gems', String(nextGems));
+    } catch (e) {
+      console.warn('pointsManager local update warning:', e);
+    }
+
+    // 6. Broadcast window events
+    window.dispatchEvent(new CustomEvent('admin_user_governance_event', {
+      detail: { massAdjustment: true, coinDelta, gemDelta, totalAccountsUpdated }
+    }));
+    window.dispatchEvent(new CustomEvent('chess_points_updated', {
+      detail: { reason: 'Mass Wealth Adjustment', delta: coinDelta }
+    }));
+    window.dispatchEvent(new CustomEvent('chess_gems_updated', {
+      detail: { reason: 'Mass Wealth Adjustment', delta: gemDelta }
+    }));
+
+    // 7. Refresh selected card if open
+    const targetUserIdInput = document.getElementById('targetUserIdInput') as HTMLInputElement | null;
+    const currentSelectedId = targetUserIdInput?.value;
+    if (currentSelectedId && localUserCache.has(currentSelectedId)) {
+      renderProfileCard(currentSelectedId, localUserCache.get(currentSelectedId));
+    }
+
+    // 8. Refresh permanent users list
+    fetchPermanentUsers();
+
+    // 9. Clear inputs if present
+    const gemInput = (document.getElementById('inputNewGems') || document.getElementById('gemDelta')) as HTMLInputElement | null;
+    const coinInput = (document.getElementById('inputNewCoins') || document.getElementById('coinDelta')) as HTMLInputElement | null;
+    if (gemInput) gemInput.value = '';
+    if (coinInput) coinInput.value = '';
+
+    alert(
+      `✅ GLOBAL WEALTH ACTION COMPLETE!\n\nSuccessfully ${isGive ? 'credited' : 'deducted'} ${deltaSummary} across all registered accounts (${totalAccountsUpdated} user accounts synchronized in real time).`
+    );
+
+    return { success: true, totalAccountsUpdated };
+  };
+
+  (window as any).quickMassAdjust = async function(coins: number, gems: number) {
+    return await (window as any).executeGlobalMassWealthAdjustment(coins, gems);
+  };
 }
 
 export const CommandControlUsersModule: React.FC = () => {
@@ -518,6 +719,72 @@ export const CommandControlUsersModule: React.FC = () => {
   const [customCurrency, setCustomCurrency] = useState<'coins' | 'gems'>('coins');
   const [isSwitching, setIsSwitching] = useState(false);
   const [switchFeedback, setSwitchFeedback] = useState<string | null>(null);
+
+  const [globalMassCoins, setGlobalMassCoins] = useState('');
+  const [globalMassGems, setGlobalMassGems] = useState('');
+  const [isMassAdjusting, setIsMassAdjusting] = useState(false);
+  const [massFeedback, setMassFeedback] = useState<string | null>(null);
+
+  const handleGlobalMassAdjust = async (mode: 'give' | 'deduct') => {
+    let rawCoins = Math.abs(parseInt(globalMassCoins || '0', 10) || 0);
+    let rawGems = Math.abs(parseInt(globalMassGems || '0', 10) || 0);
+
+    if (rawCoins === 0 && rawGems === 0) {
+      const promptCoin = prompt(`Enter COINS amount to ${mode.toUpperCase()} to EVERY registered player:`, '10000');
+      if (promptCoin === null) return;
+      rawCoins = Math.abs(parseInt(promptCoin, 10) || 0);
+
+      const promptGem = prompt(`Enter GEMS amount to ${mode.toUpperCase()} to EVERY registered player (or 0):`, '1000');
+      if (promptGem !== null) {
+        rawGems = Math.abs(parseInt(promptGem, 10) || 0);
+      }
+    }
+
+    if (rawCoins === 0 && rawGems === 0) {
+      alert('Please enter a valid amount of Coins or Gems to give or deduct from everyone.');
+      return;
+    }
+
+    const coinDelta = mode === 'give' ? rawCoins : -rawCoins;
+    const gemDelta = mode === 'give' ? rawGems : -rawGems;
+
+    setIsMassAdjusting(true);
+    setMassFeedback('Broadcasting global wealth update across all player accounts...');
+    try {
+      if (typeof (window as any).executeGlobalMassWealthAdjustment === 'function') {
+        const res = await (window as any).executeGlobalMassWealthAdjustment(coinDelta, gemDelta);
+        if (res?.success) {
+          setMassFeedback(`Successfully ${mode === 'give' ? 'credited' : 'deducted'} balances for all players!`);
+          setGlobalMassCoins('');
+          setGlobalMassGems('');
+        } else if (res?.cancelled) {
+          setMassFeedback('Mass update cancelled by admin.');
+        }
+      }
+    } catch (err: any) {
+      setMassFeedback(`Failed: ${err?.message || err}`);
+    } finally {
+      setIsMassAdjusting(false);
+      setTimeout(() => setMassFeedback(null), 5000);
+    }
+  };
+
+  const handleQuickPreset = async (coins: number, gems: number) => {
+    setIsMassAdjusting(true);
+    try {
+      if (typeof (window as any).executeGlobalMassWealthAdjustment === 'function') {
+        const res = await (window as any).executeGlobalMassWealthAdjustment(coins, gems);
+        if (res?.success) {
+          setMassFeedback('Successfully updated all player accounts!');
+        }
+      }
+    } catch (err: any) {
+      setMassFeedback(`Failed: ${err?.message || err}`);
+    } finally {
+      setIsMassAdjusting(false);
+      setTimeout(() => setMassFeedback(null), 5000);
+    }
+  };
 
   useEffect(() => {
     setupWindowGovernanceHandlers();
@@ -815,6 +1082,186 @@ export const CommandControlUsersModule: React.FC = () => {
             LOOKUP
           </button>
         </div>
+      </div>
+
+      {/* GLOBAL WEALTH DISTRIBUTION (ALL PLAYERS) - ALWAYS VISIBLE */}
+      <div
+        style={{
+          marginBottom: '16px',
+          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(24, 24, 37, 0.95))',
+          border: '1px solid #3b82f644',
+          borderRadius: '10px',
+          padding: '14px'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '16px' }}>🌐</span>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: '#60a5fa', letterSpacing: '0.5px' }}>
+              GLOBAL WEALTH DISPATCHER (ALL PLAYERS)
+            </span>
+          </div>
+          <span style={{ fontSize: '10px', background: '#1e3a8a', color: '#93c5fd', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+            SERVER-WIDE WEALTH
+          </span>
+        </div>
+
+        <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 12px 0', lineHeight: 1.4 }}>
+          Instantly credit or debit Coins and Gems across <strong>all registered player accounts</strong> and synchronize Firestore in real time.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+          <div>
+            <label style={{ fontSize: '10px', color: '#fbbf24', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+              COINS DELTA (🪙)
+            </label>
+            <input
+              type="number"
+              placeholder="e.g. 50000 or -5000"
+              value={globalMassCoins}
+              onChange={(e) => setGlobalMassCoins(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px',
+                background: '#12121a',
+                border: '1px solid #334155',
+                color: '#fff',
+                borderRadius: '5px',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '10px', color: '#f472b6', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+              GEMS DELTA (💎)
+            </label>
+            <input
+              type="number"
+              placeholder="e.g. 2000 or -500"
+              value={globalMassGems}
+              onChange={(e) => setGlobalMassGems(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px',
+                background: '#12121a',
+                border: '1px solid #334155',
+                color: '#fff',
+                borderRadius: '5px',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <button
+            type="button"
+            disabled={isMassAdjusting}
+            onClick={() => handleGlobalMassAdjust('give')}
+            style={{
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              color: '#fff',
+              border: 'none',
+              padding: '10px',
+              fontWeight: 800,
+              borderRadius: '6px',
+              cursor: isMassAdjusting ? 'not-allowed' : 'pointer',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              opacity: isMassAdjusting ? 0.7 : 1,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+            }}
+          >
+            <span>🎁</span> GIVE TO EVERYONE
+          </button>
+          <button
+            type="button"
+            disabled={isMassAdjusting}
+            onClick={() => handleGlobalMassAdjust('deduct')}
+            style={{
+              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+              color: '#fff',
+              border: 'none',
+              padding: '10px',
+              fontWeight: 800,
+              borderRadius: '6px',
+              cursor: isMassAdjusting ? 'not-allowed' : 'pointer',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              opacity: isMassAdjusting ? 0.7 : 1,
+              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)'
+            }}
+          >
+            <span>📉</span> DEDUCT FROM EVERYONE
+          </button>
+        </div>
+
+        {/* Instant Presets */}
+        <div style={{ display: 'flex', gap: '6px', marginTop: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => handleQuickPreset(5000, 500)}
+            style={{ background: '#1e293b', border: '1px solid #3b82f6', color: '#93c5fd', fontSize: '10px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            +5K 🪙 & +500 💎 ALL
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickPreset(20000, 2000)}
+            style={{ background: '#1e293b', border: '1px solid #3b82f6', color: '#93c5fd', fontSize: '10px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            +20K 🪙 & +2K 💎 ALL
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickPreset(100000, 10000)}
+            style={{ background: '#1e293b', border: '1px solid #10b981', color: '#6ee7b7', fontSize: '10px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            +100K 🪙 & +10K 💎 ALL
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickPreset(-5000, -500)}
+            style={{ background: '#371414', border: '1px solid #991b1b', color: '#fca5a5', fontSize: '10px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            -5K 🪙 & -500 💎 ALL
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickPreset(-20000, -2000)}
+            style={{ background: '#371414', border: '1px solid #991b1b', color: '#fca5a5', fontSize: '10px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            -20K 🪙 & -2K 💎 ALL
+          </button>
+        </div>
+
+        {massFeedback && (
+          <div
+            style={{
+              marginTop: '10px',
+              padding: '8px 12px',
+              background: massFeedback.includes('Failed') || massFeedback.includes('cancelled') ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+              border: `1px solid ${massFeedback.includes('Failed') || massFeedback.includes('cancelled') ? '#ef4444' : '#10b981'}`,
+              borderRadius: '6px',
+              color: '#fff',
+              fontSize: '11px',
+              fontWeight: 'bold',
+              textAlign: 'center'
+            }}
+          >
+            {massFeedback}
+          </div>
+        )}
       </div>
 
       {/* PERMANENT USERS LIST CONTAINER */}

@@ -24,6 +24,78 @@ export interface GameEconomyPlayerState {
   isMatchInProgress: boolean;
 }
 
+export const CANONICAL_GAME_MAP: Record<string, string> = {
+  chess: 'chess',
+  duochess: 'chess',
+  duochessarena: 'chess',
+  duo_chess: 'chess',
+  chesspro: 'chess',
+  checkers: 'checkers',
+  draughts: 'checkers',
+  checkersdraughts: 'checkers',
+  checkersdraughtsarena: 'checkers',
+  backgammon: 'backgammon',
+  backgammonroyale: 'backgammon',
+  snakes: 'snakes',
+  snakesandladders: 'snakes',
+  snakesladdersarena: 'snakes',
+  ludo: 'ludo',
+  ludoroyale: 'ludo',
+  ludoroyalearena: 'ludo',
+  gomoku: 'gomoku',
+  gomoku5inrow: 'gomoku',
+  gomoku5inarowarena: 'gomoku',
+  reversi: 'reversi',
+  othello: 'reversi',
+  reversiothelloarena: 'reversi',
+  connect4: 'connect4',
+  connectfour: 'connect4',
+  connectfourarena: 'connect4',
+  ultimatetictactoe: 'ultimatetictactoe',
+  tictactoe: 'ultimatetictactoe',
+  ultimatetictactoearena: 'ultimatetictactoe',
+  dotsandboxes: 'dotsandboxes',
+  dotsboxesarena: 'dotsandboxes',
+  battleship: 'battleship',
+  battleshipnaval: 'battleship',
+  battleshipnavalwarfarearena: 'battleship',
+  sim: 'sim',
+  simpencil: 'sim',
+  simpencilgamearena: 'sim',
+  uno: 'uno',
+  unocolorcards: 'uno',
+  unocolorcardsarena: 'uno',
+  hearts: 'hearts',
+  classicheartsarena: 'hearts',
+  ginrummy: 'ginrummy',
+  ginrummyarena: 'ginrummy',
+  speed: 'speed',
+  speedcardrusharena: 'speed',
+  carrom: 'carrom',
+  carromstrikerarena: 'carrom',
+  darts: 'darts',
+  darts3d: 'darts',
+  darts3darena: 'darts',
+  pingpong: 'pingpong',
+  tabletennis: 'pingpong',
+  tabletennisarena: 'pingpong',
+  business: 'business',
+  businesstycoon: 'business',
+  businesstycoonarena: 'business',
+};
+
+export function normalizeGameIdentifier(identifier?: string | null): string {
+  if (!identifier) return 'chess';
+  const clean = String(identifier).toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (CANONICAL_GAME_MAP[clean]) return CANONICAL_GAME_MAP[clean];
+  for (const [alias, canonical] of Object.entries(CANONICAL_GAME_MAP)) {
+    if (clean.includes(alias) || alias.includes(clean)) {
+      return canonical;
+    }
+  }
+  return clean;
+}
+
 let onMatchStartListener: (() => void) | null = null;
 let onWheelOpenListener: (() => void) | null = null;
 let currentSelection: 'quick_match' | 'vs_ai' | 'pass_play' | null = null;
