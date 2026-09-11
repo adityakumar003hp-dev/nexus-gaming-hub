@@ -85,6 +85,7 @@ import { GlobalAnalyticsDashboardModal } from './components/telemetry/GlobalAnal
 import { GoogleConnectModal } from './components/GoogleConnectModal';
 import { GoogleFormsModal } from './components/GoogleFormsModal';
 import { FloatingSuiteAndTelemetryMenu } from './components/FloatingSuiteAndTelemetryMenu';
+import { AIElementBot } from './components/AIElementBot';
 import { CosmeticsShopModal } from './components/CosmeticsShopModal';
 import { DailyStreakModal } from './components/DailyStreakModal';
 import { FriendsModal } from './components/FriendsModal';
@@ -2897,6 +2898,9 @@ export default function App() {
           gameMode,
         })}
       />
+
+      {/* Universal Website AI Element Bot & Safe Guide */}
+      <AIElementBot />
 
       {/* Real-Time Global Telemetry & Concurrency Analytics Modal */}
       <GlobalAnalyticsDashboardModal

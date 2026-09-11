@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "id": "usr_owner_aditya",
+    "username": "ADITYA-OWNER",
+    "email": "mukkuc41@gmail.com",
+    "passwordHash": "$2b$10$/yb9AlFcnKj5Z8lgAioJl.OraXXVxuT./v/vlpqtyOaBoxSOP55Oa",
+    "isGuest": false,
+    "token": "9d5c2fde4242dd9ce2c3aa6b1ba2191d4ce4c30ab01ad03f",
+    "createdAt": 1786546059809,
+    "rating": 2650,
+    "dailyStreak": 1
+  }
+]

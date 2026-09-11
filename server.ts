@@ -4238,6 +4238,350 @@ ${question ? `User specific question: "${question}"` : `Please provide the best 
   }
 });
 
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)),
+  ]);
+};
+
+// 9b. AI Element Bot: Universal Website Element Inspector & Safe Guide Endpoint
+app.post('/api/ai/inspect-element', async (req, res) => {
+  try {
+    const {
+      elementId = '',
+      tagName = '',
+      elementText = '',
+      ariaLabel = '',
+      role = '',
+      sectionContext = '',
+      cssClasses = '',
+      isAdminContext = false,
+      userQuery = '',
+    } = req.body || {};
+
+    // Strict Sanitization: Redact any sensitive tokens, passwords, or authentication data
+    const sanitizeText = (str: string): string => {
+      if (!str) return '';
+      return str
+        .replace(/(?:bearer\s+[A-Za-z0-9-_.]+|eyJ[A-Za-z0-9-_.]+)/gi, '[REDACTED_AUTH_TOKEN]')
+        .replace(/(?:password|secret|passcode|privateKey|db_password)\s*[:=]\s*\S+/gi, '[REDACTED_CREDENTIAL]')
+        .slice(0, 1000); // cap length to prevent prompt injection
+    };
+
+    const cleanId = sanitizeText(elementId);
+    const cleanTag = sanitizeText(tagName);
+    const cleanText = sanitizeText(elementText);
+    const cleanAria = sanitizeText(ariaLabel);
+    const cleanRole = sanitizeText(role);
+    const cleanSection = sanitizeText(sectionContext);
+    const cleanQuery = sanitizeText(userQuery);
+
+    const isExplicitAdmin =
+      isAdminContext ||
+      /admin|operator|telemetry_master|server_crash|root_access|sudo/i.test(
+        `${cleanId} ${cleanText} ${cleanSection} ${cleanAria}`
+      );
+
+    // Fallback heuristic database for instant and offline assistance
+    const generateHeuristicInsight = () => {
+      if (isExplicitAdmin) {
+        return {
+          title: 'Administration Control Element',
+          role: 'Platform Steward / System Management',
+          purpose:
+            'This interface element is part of the DUO CHESS Master Administration and Platform Operations suite.',
+          actionExplanation:
+            'Used by authenticated site stewards to configure real-time match entry fees (Coins & Gems), monitor concurrent player load, and govern server telemetry.',
+          hintsAndTips: [
+            '🛡️ **System Protection**: Administrative access is guarded with dual-layer cryptographic tokens; unauthorized modifications are automatically blocked.',
+            '💡 **Economy Hint**: Match entry fees updated in the admin panel synchronize instantly across all player game entry modals without requiring a page reload.',
+            '🎮 **Player Tip**: Regular players never need admin rights—all fees can be earned naturally through daily quests, match victories, and the daily lucky wheel!',
+          ],
+          safeAdminHint:
+            'Platform Hint: System entry fees are dynamically balanced between 50-500 Coins and 5-50 Gems to maintain an active, high-stakes competition pool.',
+          isGuarded: true,
+        };
+      }
+
+      if (/user|profile|guest|handle|pro/i.test(`${cleanId} ${cleanText} ${cleanSection}`)) {
+        return {
+          title: 'Player Profile & Identity Badge',
+          role: 'User Identity & Account Status',
+          purpose:
+            'Displays your current display name or unique guest handle, ELO rating, PRO tier status, and quick profile inspection trigger.',
+          actionExplanation:
+            'Clicking opens the User Profile Inspector where you can view career match stats, achievement badges, win streaks, and customize your avatar.',
+          hintsAndTips: [
+            '💡 **Guest vs Permanent**: Guest accounts are identified by an uppercase handle (e.g., GUEST_31CEC91C). Registered accounts show your chosen name.',
+            '🌟 **Pro Status**: Winning competitive ranked matches unlocks the PRO badge and elevates your priority in match queues.',
+          ],
+          isGuarded: false,
+        };
+      }
+
+      if (/fee|coin|gem|wallet|currency|exchange/i.test(`${cleanId} ${cleanText} ${cleanSection}`)) {
+        return {
+          title: 'Game Economy & Fee Controller',
+          role: 'Economy & Stakes Management',
+          purpose:
+            'Manages currency stakes and entry fees required to participate in high-stakes matches.',
+          actionExplanation:
+            'Allows you to pay match stakes in either Coins or Gems. Successful match winners claim the pool prize and advance their ranked standing.',
+          hintsAndTips: [
+            '💰 **Currency Tip**: Coins are earned readily through standard play and daily logins; Gems represent premium rewards unlocked through achievements.',
+            '⚡ **Real-Time Sync**: Entry fees reflect current platform rates adjusted by platform operators.',
+          ],
+          isGuarded: false,
+        };
+      }
+
+      return {
+        title: cleanText ? `Interface Element: "${cleanText.slice(0, 30)}"` : 'Platform UI Element',
+        role: cleanRole || cleanTag || 'Interactive Control',
+        purpose: `Belongs to the ${cleanSection || 'Main Game Interface'} of DUO CHESS.`,
+        actionExplanation:
+          'Interacting with this control updates game state, toggles views, or triggers competitive matchmaking actions.',
+        hintsAndTips: [
+          '🎯 **Exploration Tip**: You can use the AI Element Bot anytime to inspect any button, card, or modal on the website.',
+          '🏆 **Quick Shortcut**: Press Esc or click anywhere to exit inspector mode.',
+        ],
+        isGuarded: false,
+      };
+    };
+
+    if (!ai) {
+      const fallback = generateHeuristicInsight();
+      return res.json({
+        success: true,
+        element: {
+          id: cleanId,
+          tag: cleanTag,
+          text: cleanText,
+          section: cleanSection,
+        },
+        insight: fallback,
+        source: 'heuristic',
+      });
+    }
+
+    const systemPrompt = `You are the DUO CHESS Element Intelligence & Guide Bot, an expert AI assistant that explains every UI element on the DUO CHESS website.
+
+CRITICAL SECURITY & DATA PRIVACY DIRECTIVES (HIGHEST PRIORITY):
+1. NO PERSONAL AUTHENTICATION METHOD OR DATA IS REVEALED:
+   - You MUST NEVER reveal or discuss passwords, password hashes, security tokens, JWT signatures, session cookies, database connection strings, or personal authentication secrets.
+2. CANNOT ACCESS ADMIN PANEL SENSITIVE DATA, BUT GIVE HELPFUL HINTS & TIPS:
+   - If the element is related to the Admin Panel, site operator tools, or server management:
+     - DO NOT disclose private admin credentials, master passcodes, internal API keys, or confidential administrative records.
+     - DO provide an insightful, high-level hint and tip about how that admin feature works conceptually (e.g. how dynamic fee currencies balance game economy, how server telemetry measures latency, or tips on how players earn rewards).
+3. Always respond in structured JSON format with the following schema:
+{
+  "title": "Clear concise name for the element",
+  "role": "Functional role (e.g. Primary Navigation, Game Stake Selector, Status Indicator)",
+  "purpose": "1-2 sentences explaining what this element is and why it exists on the website",
+  "actionExplanation": "What happens when the user clicks or interacts with this element",
+  "hintsAndTips": ["Practical tip 1 for players", "Strategic or navigation hint 2"],
+  "safeAdminHint": "If admin-related, a safe, conceptual tip/hint without confidential data. Otherwise empty string.",
+  "isGuarded": true/false
+}`;
+
+    const userPrompt = `Element to inspect:
+- Tag: <${cleanTag || 'div'}>
+- ID: ${cleanId || 'None'}
+- Text Content: "${cleanText || 'None'}"
+- Role: ${cleanRole || 'Generic'}
+- Aria Label: "${cleanAria || 'None'}"
+- Parent Section / Container: "${cleanSection || 'General Page Layout'}"
+- Is Admin Context: ${isExplicitAdmin}
+${cleanQuery ? `- User Question: "${cleanQuery}"` : ''}`;
+
+    let insightData: any = null;
+    if (ai) {
+      try {
+        const geminiRes = await withTimeout(
+          ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+            config: {
+              responseMimeType: 'application/json',
+            },
+          }),
+          4000
+        );
+        if (geminiRes.text) {
+          insightData = JSON.parse(geminiRes.text);
+        }
+      } catch (primaryErr) {
+        console.warn('Primary Gemini 3.8 Flash model error/timeout, attempting fallback:', primaryErr);
+        try {
+          const fallbackRes = await withTimeout(
+            ai.models.generateContent({
+              model: 'gemini-flash-latest',
+              contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+              config: {
+                responseMimeType: 'application/json',
+              },
+            }),
+            3500
+          );
+          if (fallbackRes.text) {
+            insightData = JSON.parse(fallbackRes.text);
+          }
+        } catch (secondaryErr) {
+          console.warn('Fallback Gemini model also failed/timed out, utilizing heuristic engine:', secondaryErr);
+        }
+      }
+    }
+
+    if (!insightData) {
+      insightData = generateHeuristicInsight();
+    }
+
+    // Double check guardrail on output
+    if (isExplicitAdmin) {
+      insightData.isGuarded = true;
+      if (!insightData.safeAdminHint) {
+        insightData.safeAdminHint =
+          'Platform Hint: System entry fees are dynamically balanced between 50-500 Coins and 5-50 Gems to maintain an active competition pool without compromising system integrity.';
+      }
+    }
+
+    return res.json({
+      success: true,
+      element: {
+        id: cleanId,
+        tag: cleanTag,
+        text: cleanText,
+        section: cleanSection,
+      },
+      insight: insightData,
+      source: insightData ? 'ai_engine' : 'heuristic',
+    });
+  } catch (err: any) {
+    console.error('AI Element inspection error:', err);
+    return res.json({
+      success: true,
+      element: { id: '', tag: 'div', text: '', section: 'Platform' },
+      insight: {
+        title: 'Platform Interface Element',
+        role: 'Interactive Component',
+        purpose: 'Interactive control within the DUO CHESS arena.',
+        actionExplanation: 'Clicking triggers game or navigation actions.',
+        hintsAndTips: ['Use the AI Element Bot anytime to inspect any website element.'],
+        isGuarded: false,
+      },
+      source: 'fallback',
+    });
+  }
+});
+
+// 9c. AI Element Bot: Conversational Chat & Site Exploration Endpoint
+app.post('/api/ai/bot-chat', async (req, res) => {
+  try {
+    const { message = '', history = [] } = req.body || {};
+
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'Message is required.' });
+    }
+
+    // Sanitize user message
+    const cleanMessage = message
+      .replace(/(?:bearer\s+[A-Za-z0-9-_.]+|eyJ[A-Za-z0-9-_.]+)/gi, '[REDACTED_AUTH_TOKEN]')
+      .replace(/(?:password|secret|passcode|privateKey)\s*[:=]\s*\S+/gi, '[REDACTED_CREDENTIAL]')
+      .slice(0, 1000);
+
+    const isAskingAdmin = /admin|password|token|secret|hack|bypass|credential|database|root/i.test(cleanMessage);
+
+    if (!ai) {
+      let reply = `🤖 **NEXUS AI Bot**: I am your interactive guide to DUO CHESS!\n\n`;
+      if (isAskingAdmin) {
+        reply += `🛡️ **Admin Safety Notice & Hint**:\nDirect administrative credentials and authentication tokens are strictly protected and never revealed.\n\n💡 **Platform Tip**: The Admin Panel allows authorized system operators to tune the dynamic match fee economy (coins/gems) and monitor concurrency telemetry. Regular players can earn all required game fees freely through daily quests, match wins, and the lucky wheel!`;
+      } else {
+        reply += `I can inspect and explain every button, card, game mode, and telemetry feature across the website. Use the **Inspect Any Element** scanner or ask me any question about DUO CHESS features, rules, or economy!`;
+      }
+      return res.json({ reply, isGuarded: isAskingAdmin, source: 'heuristic' });
+    }
+
+    const systemPrompt = `You are the DUO CHESS Element Intelligence & Guide Bot, a friendly, knowledgeable, and futuristic AI assistant embedded in the DUO CHESS gaming platform.
+
+YOUR CAPABILITIES:
+- You know every element, feature, game mode, and section of DUO CHESS:
+  1. DUO CHESS & 20 Classic Arcade Games (Checkers, Backgammon, Ludo, Battleship, Uno, Carrom, etc.)
+  2. Dynamic Match Entry Fee Economy (Coins & Gems, winner-takes-pool)
+  3. Real-Time Telemetry & Global Active Users Sidebar (Tracks all online players, live match statuses, country flags)
+  4. Audio Soundpacks, Chess clocks, AI bot difficulty levels (Novice to Grandmaster)
+  5. User Profiles (Permanent accounts with custom names vs Guest accounts formatted as GUEST_XXXXXXXX)
+
+STRICT SECURITY & DATA PRIVACY GUARDRAILS:
+1. NEVER REVEAL PERSONAL AUTHENTICATION METHODS OR DATA:
+   - Do NOT disclose passwords, password hashes, encryption keys, JWT tokens, session secrets, or private user database info.
+2. CANNOT ACCESS RAW ADMIN PANEL DATA, BUT PROVIDE HINTS AND TIPS:
+   - If asked about the Admin Panel, admin passwords, server controls, or secret data:
+     - DO NOT disclose credentials, access keys, or internal private tables.
+     - DO give an informative hint and tip explaining how the feature functions conceptually (e.g., explaining how dynamic fee adjustments keep match economies balanced, or how system telemetry works), and give tips on how players can maximize their game experience.
+3. Keep your tone encouraging, concise, gamer-friendly, and format with clean Markdown.`;
+
+    const chatContents: any[] = [
+      {
+        role: 'user',
+        parts: [{ text: `${systemPrompt}\n\nUser Question: ${cleanMessage}` }],
+      },
+    ];
+
+    let replyText = '';
+    if (ai) {
+      try {
+        const response = await withTimeout(
+          ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: chatContents,
+          }),
+          4000
+        );
+        replyText = response.text || '';
+      } catch (primaryErr) {
+        console.warn('Bot chat primary model error/timeout, trying fallback:', primaryErr);
+        try {
+          const fallbackRes = await withTimeout(
+            ai.models.generateContent({
+              model: 'gemini-flash-latest',
+              contents: chatContents,
+            }),
+            3500
+          );
+          replyText = fallbackRes.text || '';
+        } catch (secondaryErr) {
+          console.warn('Bot chat fallback model also failed/timed out:', secondaryErr);
+        }
+      }
+    }
+
+    if (!replyText) {
+      if (isAskingAdmin) {
+        replyText = `🛡️ **Admin Safety Notice & Hint**:\nDirect administrative credentials and authentication tokens are strictly protected and never revealed.\n\n💡 **Platform Tip**: The Admin Panel allows authorized system operators to tune the dynamic match fee economy (coins/gems) and monitor concurrency telemetry. Regular players can earn all required game fees freely through daily quests, match wins, and the lucky wheel!`;
+      } else {
+        replyText = `🤖 **NEXUS AI Bot**: I am your interactive guide to DUO CHESS! I can inspect and explain every button, card, game mode, and telemetry feature across the website. Use the **Inspect Any Element** scanner or ask me any question about DUO CHESS features, rules, or economy!`;
+      }
+    }
+
+    return res.json({
+      reply: replyText,
+      isGuarded: isAskingAdmin,
+      source: ai ? 'ai_engine' : 'heuristic',
+    });
+  } catch (err: any) {
+    console.error('AI Bot chat error:', err);
+    const isAskingAdmin = /admin|password|token|secret/i.test(req.body?.message || '');
+    return res.json({
+      reply: isAskingAdmin
+        ? '🛡️ **Admin Safety Notice & Hint**: Administrative credentials and authentication tokens are strictly protected. Platform Tip: Admins manage dynamic game entry fees (Coins/Gems) to balance the arena.'
+        : '🤖 **NEXUS AI Bot**: I am here to help you inspect and understand any element on the website! Try clicking **Inspect Any Element** to see how any button works.',
+      isGuarded: isAskingAdmin,
+      source: 'fallback',
+    });
+  }
+});
+
 // ==========================================
 // VOICE MODERATION & AI CLASSIFICATION ENGINE
 // ==========================================
