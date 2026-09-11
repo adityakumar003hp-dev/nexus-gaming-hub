@@ -124,6 +124,8 @@ import {
   syncGameTime,
   hasAgreedPrivacyPolicy,
   agreePrivacyPolicy,
+  getDefaultGuestHandle,
+  formatGuestUsername,
 } from './utils/auth';
 import { recordTwentyGameResult } from './utils/statsEngine';
 import { socketService } from './utils/socket';
@@ -305,6 +307,28 @@ export default function App() {
   const [hasPaidGameFee, setHasPaidGameFee] = useState<boolean>(false);
   const hasPaidGameFeeRef = useRef<boolean>(false);
   const [pendingGameStartAction, setPendingGameStartAction] = useState<(() => void) | null>(null);
+  const [economyVersion, setEconomyVersion] = useState<number>(0);
+
+  // Sync with Admin Panel game fee changes & currency adjustments immediately
+  useEffect(() => {
+    const handleEconomyUpdate = () => {
+      setEconomyVersion((v) => v + 1);
+    };
+    window.addEventListener('admin_fee_updated', handleEconomyUpdate);
+    window.addEventListener('admin_economy_updated', handleEconomyUpdate);
+    window.addEventListener('global_config_updated', handleEconomyUpdate);
+    window.addEventListener('chess_points_updated', handleEconomyUpdate);
+    window.addEventListener('chess_gems_updated', handleEconomyUpdate);
+    window.addEventListener('storage', handleEconomyUpdate);
+    return () => {
+      window.removeEventListener('admin_fee_updated', handleEconomyUpdate);
+      window.removeEventListener('admin_economy_updated', handleEconomyUpdate);
+      window.removeEventListener('global_config_updated', handleEconomyUpdate);
+      window.removeEventListener('chess_points_updated', handleEconomyUpdate);
+      window.removeEventListener('chess_gems_updated', handleEconomyUpdate);
+      window.removeEventListener('storage', handleEconomyUpdate);
+    };
+  }, []);
 
   // Settings & Configuration
   const [settings, setSettings] = useState<GameSettings>(defaultSettings);
@@ -346,11 +370,18 @@ export default function App() {
         if (!user) {
           user = await fetchGuestAuth();
         }
-        setCurrentUser(user);
+        if (user) {
+          if (user.isGuest && user.username) {
+            user.username = formatGuestUsername(user.username);
+          }
+          setCurrentUser(user);
+        }
 
         // Connect socket
         const socket = socketService.connect();
-        socketService.authenticate(user.token);
+        if (user?.token) {
+          socketService.authenticate(user.token);
+        }
 
         // Check compulsory privacy & terms agreement
         const agreed = hasAgreedPrivacyPolicy();
@@ -666,8 +697,23 @@ export default function App() {
       }
     };
 
+    const handleMatchFeePaid = () => {
+      hasPaidGameFeeRef.current = true;
+      setHasPaidGameFee(true);
+      setCurrentUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              gamerPoints: getUserPoints(),
+              gems: getUserGems(),
+            }
+          : null
+      );
+    };
+
     window.addEventListener('platform_game_launched', handlePlatformGameLaunched);
     window.addEventListener('platform_game_switched', handlePlatformGameSwitched);
+    window.addEventListener('match_fee_paid', handleMatchFeePaid);
 
     return () => {
       unsub();
@@ -676,24 +722,27 @@ export default function App() {
       delete (window as any).handleGameSwitch;
       window.removeEventListener('platform_game_launched', handlePlatformGameLaunched);
       window.removeEventListener('platform_game_switched', handlePlatformGameSwitched);
+      window.removeEventListener('match_fee_paid', handleMatchFeePaid);
     };
   }, []);
 
   // Sync current user session and connected lobby users into global telemetry engine
   useEffect(() => {
-    if (currentUser?.username) {
-      const activeGameId = selectedWheelGame?.id || 'chess';
-      const roomTitle = selectedWheelGame ? `${selectedWheelGame.name} Arena - Room #${activeRoomId || '001'}` : 'Main Platform Lobby';
-      telemetryEngine.updateLocalUserSession(
-        currentUser.username,
-        currentUser.stats,
-        currentUser.isGuest,
-        activeGameId,
-        roomTitle
-      );
-    }
+    const activeGameId = selectedWheelGame?.id || 'chess';
+    const roomTitle = selectedWheelGame ? `${selectedWheelGame.name} Arena - Room #${activeRoomId || '001'}` : 'Main Platform Lobby';
+    const activeUsername = currentUser?.username || getDefaultGuestHandle();
+    const isGuest = currentUser ? !!currentUser.isGuest : true;
+
+    telemetryEngine.updateLocalUserSession(
+      activeUsername,
+      currentUser?.stats,
+      isGuest,
+      activeGameId,
+      roomTitle
+    );
+
     lobbyUsers.forEach((lu) => {
-      if (lu.username && lu.username !== currentUser?.username) {
+      if (lu.username && lu.username !== activeUsername) {
         telemetryEngine.updateLocalUserSession(
           lu.username,
           undefined,
@@ -1583,6 +1632,7 @@ export default function App() {
         {/* Choose Mode 4-Card Grid Panel */}
         <ChooseModePanel
           gameMode={gameMode}
+          activeBoardGame={activeBoardGame}
           onChangeGameMode={(mode) => {
             switchActiveGame(activeBoardGame, mode);
             if (mode === 'pvp') {
@@ -1653,97 +1703,150 @@ export default function App() {
           {/* Active Board Game Arena Container with Mandatory Entry Fee Lock */}
           <div className="w-full relative flex flex-col items-center justify-center">
             {/* Locked Gate Overlay when Entry Fee has not been paid */}
-            {!hasPaidGameFee && (
-              <div
-                id="matchEntryFeeLockedOverlay"
-                onClick={() => setIsEntryFeeModalOpen(true)}
-                className="absolute inset-0 z-30 min-h-[480px] bg-slate-950/85 backdrop-blur-md rounded-3xl border-2 border-purple-500/50 shadow-[0_0_60px_rgba(168,85,247,0.25)] flex flex-col items-center justify-center p-6 text-center cursor-pointer select-none animate-in fade-in zoom-in-95 duration-200"
-              >
-                {/* Glowing Lock Badge */}
-                <div className="relative mb-4">
-                  <div className="absolute -inset-2 bg-gradient-to-r from-amber-500 to-purple-600 rounded-2xl blur-lg opacity-70 animate-pulse" />
-                  <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-purple-600 flex items-center justify-center text-white text-3xl shadow-xl shadow-purple-500/30">
-                    <Lock className="w-8 h-8 text-white" />
-                  </div>
-                </div>
+            {!hasPaidGameFee && (() => {
+              const isFreePlayActive = GameEconomy.isFreeMode();
+              const currentFeeCoins = isFreePlayActive ? 0 : GameEconomy.getFeeCoins(activeBoardGame);
+              const currentFeeGems = isFreePlayActive ? 0 : GameEconomy.getFeeGems(activeBoardGame);
+              const isCompletelyFree = isFreePlayActive || (currentFeeCoins === 0 && currentFeeGems === 0);
+              const userCoins = getUserPoints();
+              const userGems = getUserGems();
 
-                <div className="space-y-1.5 max-w-md">
-                  <span className="text-[11px] uppercase font-mono font-black tracking-widest text-amber-400 bg-amber-500/15 px-3 py-1 rounded-full border border-amber-500/30 inline-block">
-                    Match Gate Locked
-                  </span>
-                  <h3 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider font-mono">
-                    Match Entry Fee Required
-                  </h3>
-                  <p className="text-xs sm:text-sm text-slate-300 font-medium">
-                    To run and play <strong className="text-amber-300 font-bold">{getGameDisplayTitle(activeBoardGame)}</strong> ({gameMode.toUpperCase()}), pay the entry fee of <span className="text-amber-300 font-bold">2,000 🪙 Coins</span> or <span className="text-fuchsia-300 font-bold">2,000 💎 Gems</span> for every match and rematch.
-                  </p>
-                </div>
+              const handleUnlockOrOpenModal = (e?: React.MouseEvent) => {
+                if (e) e.stopPropagation();
+                if (isCompletelyFree) {
+                  hasPaidGameFeeRef.current = true;
+                  setHasPaidGameFee(true);
+                  soundFx.playWin();
+                  if (pendingGameStartAction) {
+                    pendingGameStartAction();
+                    setPendingGameStartAction(null);
+                  }
+                } else {
+                  setIsEntryFeeModalOpen(true);
+                }
+              };
 
-                {/* Primary Action Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsEntryFeeModalOpen(true);
-                  }}
-                  className="mt-5 py-3.5 px-8 rounded-2xl bg-gradient-to-r from-amber-500 via-purple-600 to-pink-600 hover:from-amber-400 hover:to-pink-500 text-white font-black text-sm sm:text-base shadow-xl shadow-purple-500/30 hover:shadow-purple-500/50 transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2.5 cursor-pointer"
+              return (
+                <div
+                  id="matchEntryFeeLockedOverlay"
+                  onClick={handleUnlockOrOpenModal}
+                  className="absolute inset-0 z-30 min-h-[480px] bg-slate-950/85 backdrop-blur-md rounded-3xl border-2 border-purple-500/50 shadow-[0_0_60px_rgba(168,85,247,0.25)] flex flex-col items-center justify-center p-6 text-center cursor-pointer select-none animate-in fade-in zoom-in-95 duration-200"
                 >
-                  <span>🎮 Pay Entry Fee to Play (2000🪙 / 2000💎)</span>
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-
-                {/* Real-time Balances display */}
-                <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mt-6 text-xs text-slate-400">
-                  <div className="flex items-center gap-1.5 bg-slate-900/90 px-3.5 py-1.5 rounded-xl border border-slate-800 shadow-inner">
-                    <span>🪙 Your Coins:</span>
-                    <strong className="text-amber-300 font-mono font-bold">{getUserPoints().toLocaleString()}</strong>
-                    <span className="text-[10px] text-slate-500">(Need 2,000)</span>
+                  {/* Glowing Lock Badge */}
+                  <div className="relative mb-4">
+                    <div className={`absolute -inset-2 rounded-2xl blur-lg opacity-70 animate-pulse ${
+                      isCompletelyFree
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-600'
+                        : 'bg-gradient-to-r from-amber-500 to-purple-600'
+                    }`} />
+                    <div className={`relative w-16 h-16 rounded-2xl flex items-center justify-center text-white text-3xl shadow-xl ${
+                      isCompletelyFree
+                        ? 'bg-gradient-to-tr from-emerald-500 to-teal-600 shadow-emerald-500/30'
+                        : 'bg-gradient-to-tr from-amber-500 to-purple-600 shadow-purple-500/30'
+                    }`}>
+                      {isCompletelyFree ? <Sparkles className="w-8 h-8 text-white" /> : <Lock className="w-8 h-8 text-white" />}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 bg-slate-900/90 px-3.5 py-1.5 rounded-xl border border-slate-800 shadow-inner">
-                    <span>💎 Your Gems:</span>
-                    <strong className="text-fuchsia-300 font-mono font-bold">{getUserGems().toLocaleString()}</strong>
-                    <span className="text-[10px] text-slate-500">(Need 2,000)</span>
+
+                  <div className="space-y-1.5 max-w-md">
+                    <span className={`text-[11px] uppercase font-mono font-black tracking-widest px-3 py-1 rounded-full border inline-block ${
+                      isCompletelyFree
+                        ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+                        : 'text-amber-400 bg-amber-500/15 border-amber-500/30'
+                    }`}>
+                      {isCompletelyFree ? '✨ Free Play Mode Active' : 'Match Gate Locked'}
+                    </span>
+                    <h3 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider font-mono">
+                      {isCompletelyFree ? 'Match Entry Fee Waived' : 'Match Entry Fee Required'}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 font-medium">
+                      {isCompletelyFree ? (
+                        <>
+                          To run and play <strong className="text-emerald-300 font-bold">{getGameDisplayTitle(activeBoardGame)}</strong> ({gameMode.toUpperCase()}), entry fees have been waived by Admin to <span className="text-emerald-300 font-bold">0 🪙 Coins</span> and <span className="text-emerald-300 font-bold">0 💎 Gems</span>.
+                        </>
+                      ) : (
+                        <>
+                          To run and play <strong className="text-amber-300 font-bold">{getGameDisplayTitle(activeBoardGame)}</strong> ({gameMode.toUpperCase()}), pay the entry fee of <span className="text-amber-300 font-bold">{currentFeeCoins.toLocaleString()} 🪙 Coins</span> or <span className="text-fuchsia-300 font-bold">{currentFeeGems.toLocaleString()} 💎 Gems</span> for every match and rematch.
+                        </>
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Primary Action Button */}
+                  <button
+                    type="button"
+                    onClick={handleUnlockOrOpenModal}
+                    className={`mt-5 py-3.5 px-8 rounded-2xl text-white font-black text-sm sm:text-base shadow-xl transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2.5 cursor-pointer ${
+                      isCompletelyFree
+                        ? 'bg-gradient-to-r from-emerald-500 via-teal-600 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 shadow-emerald-500/30 hover:shadow-emerald-500/50'
+                        : 'bg-gradient-to-r from-amber-500 via-purple-600 to-pink-600 hover:from-amber-400 hover:to-pink-500 shadow-purple-500/30 hover:shadow-purple-500/50'
+                    }`}
+                  >
+                    <span>
+                      {isCompletelyFree
+                        ? '🎮 Enter Free Match (0🪙 / 0💎)'
+                        : `🎮 Pay Entry Fee to Play (${currentFeeCoins.toLocaleString()}🪙 / ${currentFeeGems.toLocaleString()}💎)`}
+                    </span>
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+
+                  {/* Real-time Balances display */}
+                  <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mt-6 text-xs text-slate-400">
+                    <div className="flex items-center gap-1.5 bg-slate-900/90 px-3.5 py-1.5 rounded-xl border border-slate-800 shadow-inner">
+                      <span>🪙 Your Coins:</span>
+                      <strong className="text-amber-300 font-mono font-bold">{userCoins.toLocaleString()}</strong>
+                      <span className="text-[10px] text-slate-500">
+                        {isCompletelyFree ? '(Free Entry)' : `(Need ${currentFeeCoins.toLocaleString()})`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-slate-900/90 px-3.5 py-1.5 rounded-xl border border-slate-800 shadow-inner">
+                      <span>💎 Your Gems:</span>
+                      <strong className="text-fuchsia-300 font-mono font-bold">{userGems.toLocaleString()}</strong>
+                      <span className="text-[10px] text-slate-500">
+                        {isCompletelyFree ? '(Free Entry)' : `(Need ${currentFeeGems.toLocaleString()})`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quick actions if balance low */}
+                  <div className="flex items-center gap-3 mt-4 text-xs">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsDailyWheelOpen(true);
+                      }}
+                      className="text-purple-400 hover:text-purple-300 underline font-semibold cursor-pointer flex items-center gap-1"
+                    >
+                      <span>🎡 Spin Wheel</span>
+                    </button>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsQuestsOpen(true);
+                      }}
+                      className="text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer flex items-center gap-1"
+                    >
+                      <span>🎯 Tasks & Quests</span>
+                    </button>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExchangeDirection('gemToCoin');
+                        setIsExchangeModalOpen(true);
+                      }}
+                      className="text-cyan-400 hover:text-cyan-300 underline font-semibold cursor-pointer flex items-center gap-1"
+                    >
+                      <span>🔄 Convert Currency</span>
+                    </button>
                   </div>
                 </div>
-
-                {/* Quick actions if balance low */}
-                <div className="flex items-center gap-3 mt-4 text-xs">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsDailyWheelOpen(true);
-                    }}
-                    className="text-purple-400 hover:text-purple-300 underline font-semibold cursor-pointer flex items-center gap-1"
-                  >
-                    <span>🎡 Spin Wheel</span>
-                  </button>
-                  <span className="text-slate-600">•</span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsQuestsOpen(true);
-                    }}
-                    className="text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer flex items-center gap-1"
-                  >
-                    <span>🎯 Tasks & Quests</span>
-                  </button>
-                  <span className="text-slate-600">•</span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExchangeDirection('gemToCoin');
-                      setIsExchangeModalOpen(true);
-                    }}
-                    className="text-cyan-400 hover:text-cyan-300 underline font-semibold cursor-pointer flex items-center gap-1"
-                  >
-                    <span>🔄 Convert Currency</span>
-                  </button>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Board Container with blur & disabled state when fee not paid */}
             <div className={`w-full flex flex-col items-center gap-3 transition-all duration-300 ${!hasPaidGameFee ? 'pointer-events-none opacity-20 filter blur-[1.5px] select-none' : ''}`}>
@@ -2398,6 +2501,9 @@ export default function App() {
         onLogout={() => {
           clearStoredToken();
           fetchGuestAuth().then((guest) => {
+            if (guest && guest.isGuest && guest.username) {
+              guest.username = formatGuestUsername(guest.username);
+            }
             setCurrentUser(guest);
             socketService.authenticate(guest.token);
           });
@@ -3017,7 +3123,11 @@ export default function App() {
       {/* Game Entry & Insufficient Balance Modal (gameEntryModal) */}
       <GameEntryModal
         onOpenWheel={() => setIsDailyWheelOpen(true)}
-        onMatchStarted={() => resetGame(true)}
+        onMatchStarted={() => {
+          hasPaidGameFeeRef.current = true;
+          setHasPaidGameFee(true);
+          resetGame(true);
+        }}
       />
 
       {/* About Us Section */}

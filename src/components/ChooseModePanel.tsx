@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Zap, Users, Bot, Trophy, Sparkles, Wand2, Dices, Brain, Swords, Flame, ShieldAlert, Cpu } from 'lucide-react';
-import { GameMode, AIDifficulty } from '../types';
+import { GameMode, AIDifficulty, ActiveBoardGame } from '../types';
 import { GameEconomy } from '../utils/gameEconomy';
 import { normalizeAIDifficulty, AI_DIFFICULTY_TIERS } from './AIDifficultySelector';
 
 interface ChooseModePanelProps {
   gameMode: GameMode;
+  activeBoardGame?: ActiveBoardGame;
   onChangeGameMode: (mode: GameMode) => void;
   onOpenMatchmaking: () => void;
   onOpenTournament?: () => void;
@@ -18,6 +19,7 @@ interface ChooseModePanelProps {
 
 export const ChooseModePanel: React.FC<ChooseModePanelProps> = ({
   gameMode,
+  activeBoardGame = 'chess',
   onChangeGameMode,
   onOpenMatchmaking,
   onOpenTournament,
@@ -29,6 +31,33 @@ export const ChooseModePanel: React.FC<ChooseModePanelProps> = ({
 }) => {
   const currentNumLvl = normalizeAIDifficulty(aiDifficulty);
   const activeTier = AI_DIFFICULTY_TIERS.find((t) => t.level === currentNumLvl) || AI_DIFFICULTY_TIERS[3];
+
+  // Re-render immediately whenever game fees or economy settings are changed in Admin Panel
+  const [, setFeeTick] = useState(0);
+  useEffect(() => {
+    const handleFeeChange = () => setFeeTick((t) => t + 1);
+    window.addEventListener('admin_fee_updated', handleFeeChange);
+    window.addEventListener('admin_economy_updated', handleFeeChange);
+    window.addEventListener('global_config_updated', handleFeeChange);
+    window.addEventListener('storage', handleFeeChange);
+    return () => {
+      window.removeEventListener('admin_fee_updated', handleFeeChange);
+      window.removeEventListener('admin_economy_updated', handleFeeChange);
+      window.removeEventListener('global_config_updated', handleFeeChange);
+      window.removeEventListener('storage', handleFeeChange);
+    };
+  }, []);
+
+  const isFree = GameEconomy.isFreeMode();
+  const feeCoins = isFree ? 0 : GameEconomy.getFeeCoins(activeBoardGame);
+  const feeGems = isFree ? 0 : GameEconomy.getFeeGems(activeBoardGame);
+  const isZeroFee = isFree || (feeCoins === 0 && feeGems === 0);
+
+  const feeBadgeText = isZeroFee
+    ? 'Free (0 Coins)'
+    : `${feeCoins.toLocaleString()} Coins${feeGems > 0 ? ` / ${feeGems.toLocaleString()} Gems` : ''}`;
+
+  const aiMatchTitle = activeBoardGame === 'chess' ? 'Chess Pro' : `${activeBoardGame.charAt(0).toUpperCase() + activeBoardGame.slice(1)} AI`;
 
   return (
     <div className="w-full bg-[#0a0f1d] border border-slate-800/90 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col justify-between h-full space-y-4">
@@ -61,8 +90,15 @@ export const ChooseModePanel: React.FC<ChooseModePanelProps> = ({
                 </div>
                 <div className="text-[11px] text-indigo-300/80 font-medium flex items-center justify-between">
                   <span>Random Opponent</span>
-                  <span id="labelQuickMatchFee" className="bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30 font-bold">
-                    <span id="entryFeeDisplay">2000 Coins / Gems</span>
+                  <span
+                    id="labelQuickMatchFee"
+                    className={`px-1.5 py-0.5 rounded border font-bold text-[10px] font-mono transition-colors ${
+                      isZeroFee
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    }`}
+                  >
+                    <span id="entryFeeDisplay">{feeBadgeText}</span>
                   </span>
                 </div>
               </div>
@@ -73,7 +109,7 @@ export const ChooseModePanel: React.FC<ChooseModePanelProps> = ({
           <button
             id="btnChessPro"
             data-mode="chess_pro"
-            onClick={() => GameEconomy.requestGameStart(2, 'Chess Pro AI', () => onChangeGameMode('ai'), 'vs_ai')}
+            onClick={() => GameEconomy.requestGameStart(2, `${aiMatchTitle} AI`, () => onChangeGameMode('ai'), 'vs_ai')}
             className={`mode-card mode-btn w-full p-3.5 rounded-xl border text-left transition-all active:scale-[0.98] group cursor-pointer ${
               gameMode === 'ai'
                 ? 'bg-sky-950/40 border-sky-500/60 shadow-lg shadow-sky-950/30'
@@ -87,14 +123,23 @@ export const ChooseModePanel: React.FC<ChooseModePanelProps> = ({
                 </div>
                 <div className="flex-1">
                   <div className="font-extrabold text-sm text-white group-hover:text-sky-200 transition-colors flex items-center gap-2">
-                    <span>🏆 Chess Pro</span>
+                    <span>🏆 {aiMatchTitle}</span>
                     <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
                       Lvl {currentNumLvl}
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-400 font-medium flex items-center justify-between">
                     <span>{activeTier.name} Master</span>
-                    <span id="labelChessProFee" className="bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30 font-bold">2000 Coins / Gems</span>
+                    <span
+                      id="labelChessProFee"
+                      className={`px-1.5 py-0.5 rounded border font-bold text-[10px] font-mono transition-colors ${
+                        isZeroFee
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                      }`}
+                    >
+                      {feeBadgeText}
+                    </span>
                   </div>
                 </div>
               </div>

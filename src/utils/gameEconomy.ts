@@ -177,18 +177,58 @@ export function handlePaymentSuccess() {
 // Trigger payment flow for mode selection
 export function triggerPaymentFlow(mode: 'quick_match' | 'vs_ai' | 'pass_play') {
   currentSelection = mode;
+  const titles = {
+    quick_match: '⚡ Quick Match',
+    vs_ai: '🤖 Play with AI',
+    pass_play: '👥 Pass & Play',
+  };
+  const activeTitle = titles[mode] || 'Match';
+  GameEconomy.playerState.activeGameTitle = activeTitle;
+
   const gameEntryModal = document.getElementById('gameEntryModal');
   const titleEl = document.getElementById('entryGameTitle');
   const entryStep = document.getElementById('entrySelectStep');
   const errorStep = document.getElementById('insufficientStep');
 
   if (titleEl) {
-    const titles = {
-      quick_match: '⚡ Quick Match',
-      vs_ai: '🤖 Play with AI',
-      pass_play: '👥 Pass & Play',
-    };
-    titleEl.innerText = `🎮 Play ${titles[mode] || 'Match'}`;
+    titleEl.innerText = `🎮 Play ${activeTitle}`;
+  }
+
+  const isFree = GameEconomy.isFreeMode();
+  const feeCoins = isFree ? 0 : GameEconomy.getFeeCoins(activeTitle);
+  const feeGems = isFree ? 0 : GameEconomy.getFeeGems(activeTitle);
+  const isZero = isFree || (feeCoins === 0 && feeGems === 0);
+
+  const btnCoins = document.getElementById('btnPlayWithCoins');
+  if (btnCoins) {
+    btnCoins.innerText = isZero ? 'Play Free (0 🪙)' : `Play with ${feeCoins.toLocaleString()} 🪙`;
+    (btnCoins as HTMLElement).style.background = isZero ? '#10b981' : '#eab308';
+    (btnCoins as HTMLElement).style.color = isZero ? '#fff' : '#000';
+  }
+  const btnGems = document.getElementById('btnPlayWithGems');
+  if (btnGems) {
+    btnGems.innerText = isZero ? 'Play Free (0 💎)' : `Play with ${feeGems.toLocaleString()} 💎`;
+    (btnGems as HTMLElement).style.background = isZero ? '#059669' : '#3b82f6';
+    (btnGems as HTMLElement).style.color = '#fff';
+  }
+
+  const modalCoin = document.getElementById('playerCoinsModal');
+  const modalGem = document.getElementById('playerGemsModal');
+  if (modalCoin) modalCoin.innerText = `🪙 ${getUserPoints().toLocaleString()} Coins`;
+  if (modalGem) modalGem.innerText = `💎 ${getUserGems().toLocaleString()} Gems`;
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('game_entry_modal_opened', {
+        detail: {
+          gameId: mode,
+          gameTitle: activeTitle,
+          feeCoins,
+          feeGems,
+          isFree,
+        },
+      })
+    );
   }
 
   if (gameEntryModal) {
@@ -259,9 +299,14 @@ export const GameEconomy = {
           const rawOverrides = localStorage.getItem('admin_game_fee_overrides');
           if (rawOverrides) {
             const parsed = JSON.parse(rawOverrides);
+            const canonical = normalizeGameIdentifier(gameTitle);
+            if (parsed[canonical] && typeof parsed[canonical].coins === 'number') {
+              return parsed[canonical].coins;
+            }
             const key = String(gameTitle).toLowerCase().replace(/[^a-z0-9]/g, '');
             for (const [k, v] of Object.entries(parsed)) {
-              if (key.includes(k) && typeof (v as any).coins === 'number') {
+              const cleanK = normalizeGameIdentifier(k);
+              if ((cleanK === canonical || key.includes(k) || k.includes(key)) && typeof (v as any).coins === 'number') {
                 return (v as any).coins;
               }
             }
@@ -270,7 +315,7 @@ export const GameEconomy = {
       }
       const saved = localStorage.getItem('admin_game_fee_coins');
       if (saved !== null && !isNaN(Number(saved))) return Number(saved);
-      if (window.GAME_STATE?.entryFeeCoins !== undefined) return window.GAME_STATE.entryFeeCoins;
+      if (window.GAME_STATE?.entryFeeCoins !== undefined) return Number(window.GAME_STATE.entryFeeCoins);
     }
     return 2000;
   },
@@ -283,9 +328,14 @@ export const GameEconomy = {
           const rawOverrides = localStorage.getItem('admin_game_fee_overrides');
           if (rawOverrides) {
             const parsed = JSON.parse(rawOverrides);
+            const canonical = normalizeGameIdentifier(gameTitle);
+            if (parsed[canonical] && typeof parsed[canonical].gems === 'number') {
+              return parsed[canonical].gems;
+            }
             const key = String(gameTitle).toLowerCase().replace(/[^a-z0-9]/g, '');
             for (const [k, v] of Object.entries(parsed)) {
-              if (key.includes(k) && typeof (v as any).gems === 'number') {
+              const cleanK = normalizeGameIdentifier(k);
+              if ((cleanK === canonical || key.includes(k) || k.includes(key)) && typeof (v as any).gems === 'number') {
                 return (v as any).gems;
               }
             }
@@ -294,7 +344,7 @@ export const GameEconomy = {
       }
       const saved = localStorage.getItem('admin_game_fee_gems');
       if (saved !== null && !isNaN(Number(saved))) return Number(saved);
-      if (window.GAME_STATE?.entryFeeGems !== undefined) return window.GAME_STATE.entryFeeGems;
+      if (window.GAME_STATE?.entryFeeGems !== undefined) return Number(window.GAME_STATE.entryFeeGems);
     }
     return 2000;
   },
@@ -311,6 +361,10 @@ export const GameEconomy = {
         window.GAME_STATE.entryFeeCoins = coins;
         window.GAME_STATE.entryFeeGems = gems;
       }
+      if (typeof (window as any).updateGameFeeDisplaysInUI === 'function') {
+        (window as any).updateGameFeeDisplaysInUI();
+      }
+      this.updateUI();
       window.dispatchEvent(
         new CustomEvent('admin_fee_updated', {
           detail: { coins, gems, isFreeMode, gameOverrides },
@@ -341,6 +395,25 @@ export const GameEconomy = {
     const modalGem = document.getElementById('playerGemsModal');
     if (modalCoin) modalCoin.innerText = `🪙 ${this.playerState.coins.toLocaleString()} Coins`;
     if (modalGem) modalGem.innerText = `💎 ${this.playerState.gems.toLocaleString()} Gems`;
+
+    const activeTitle = this.playerState.activeGameTitle || 'Game';
+    const isFree = this.isFreeMode();
+    const feeCoins = isFree ? 0 : this.getFeeCoins(activeTitle);
+    const feeGems = isFree ? 0 : this.getFeeGems(activeTitle);
+    const isZero = isFree || (feeCoins === 0 && feeGems === 0);
+
+    const btnCoins = document.getElementById('btnPlayWithCoins');
+    if (btnCoins) {
+      btnCoins.innerText = isZero ? 'Play Free (0 🪙)' : `Play with ${feeCoins.toLocaleString()} 🪙`;
+      (btnCoins as HTMLElement).style.background = isZero ? '#10b981' : '#eab308';
+      (btnCoins as HTMLElement).style.color = isZero ? '#fff' : '#000';
+    }
+    const btnGems = document.getElementById('btnPlayWithGems');
+    if (btnGems) {
+      btnGems.innerText = isZero ? 'Play Free (0 💎)' : `Play with ${feeGems.toLocaleString()} 💎`;
+      (btnGems as HTMLElement).style.background = isZero ? '#059669' : '#3b82f6';
+      (btnGems as HTMLElement).style.color = '#fff';
+    }
 
     // Sync to backend storage
     syncBalancesToBackend(this.playerState.gems, this.playerState.coins);
@@ -377,6 +450,43 @@ export const GameEconomy = {
       titleEl.innerText = `🎮 Play ${gameTitle}`;
     }
 
+    const isFree = this.isFreeMode();
+    const feeCoins = isFree ? 0 : this.getFeeCoins(gameTitle);
+    const feeGems = isFree ? 0 : this.getFeeGems(gameTitle);
+    const isZero = isFree || (feeCoins === 0 && feeGems === 0);
+
+    const btnCoins = document.getElementById('btnPlayWithCoins');
+    if (btnCoins) {
+      btnCoins.innerText = isZero ? 'Play Free (0 🪙)' : `Play with ${feeCoins.toLocaleString()} 🪙`;
+      (btnCoins as HTMLElement).style.background = isZero ? '#10b981' : '#eab308';
+      (btnCoins as HTMLElement).style.color = isZero ? '#fff' : '#000';
+    }
+    const btnGems = document.getElementById('btnPlayWithGems');
+    if (btnGems) {
+      btnGems.innerText = isZero ? 'Play Free (0 💎)' : `Play with ${feeGems.toLocaleString()} 💎`;
+      (btnGems as HTMLElement).style.background = isZero ? '#059669' : '#3b82f6';
+      (btnGems as HTMLElement).style.color = '#fff';
+    }
+
+    const modalCoin = document.getElementById('playerCoinsModal');
+    const modalGem = document.getElementById('playerGemsModal');
+    if (modalCoin) modalCoin.innerText = `🪙 ${getUserPoints().toLocaleString()} Coins`;
+    if (modalGem) modalGem.innerText = `💎 ${getUserGems().toLocaleString()} Gems`;
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('game_entry_modal_opened', {
+          detail: {
+            gameId,
+            gameTitle,
+            feeCoins,
+            feeGems,
+            isFree,
+          },
+        })
+      );
+    }
+
     if (modal && entryStep && errorStep) {
       entryStep.classList.remove('hidden');
       errorStep.classList.add('hidden');
@@ -384,23 +494,34 @@ export const GameEconomy = {
       modal.style.display = 'flex';
     } else {
       // Direct prompt fallback
-      const useCoins = confirm(`Deduct 100 Coins to start ${gameTitle}? (Cancel for 50 Gems)`);
-      this.confirmAndStartGame(useCoins ? 'coins' : 'gems');
+      const promptText = isZero
+        ? `Start ${gameTitle} for Free (0 Coins/Gems)?`
+        : `Deduct ${feeCoins.toLocaleString()} Coins to start ${gameTitle}? (Cancel for ${feeGems.toLocaleString()} Gems)`;
+      const useCoins = confirm(promptText);
+      this.confirmAndStartGame(useCoins ? 'coins' : 'gems', gameTitle);
     }
   },
 
   /**
    * Validates Balance, Deducts Fee & Launches Active Game
    */
-  confirmAndStartGame(paymentType: 'coins' | 'gems'): boolean {
-    const feeCoins = this.getFeeCoins(this.playerState.activeGameTitle);
-    const feeGems = this.getFeeGems(this.playerState.activeGameTitle);
+  confirmAndStartGame(paymentType: 'coins' | 'gems', customGame?: string): boolean {
+    const targetGame = customGame || this.playerState.activeGameTitle;
+    const feeCoins = this.getFeeCoins(targetGame);
+    const feeGems = this.getFeeGems(targetGame);
 
     if (this.isFreeMode() || (paymentType === 'coins' && feeCoins === 0) || (paymentType === 'gems' && feeGems === 0)) {
       // Free mode - bypass deduction
       soundFx.playWin();
       this.closeEntryModal();
       this.playerState.isMatchInProgress = true;
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('match_fee_paid', {
+            detail: { paymentType, targetGame, feeCoins: 0, feeGems: 0 },
+          })
+        );
+      }
       if (typeof (window as any).onPaymentSuccess === 'function') {
         (window as any).onPaymentSuccess();
       } else {
@@ -411,19 +532,23 @@ export const GameEconomy = {
     }
 
     if (paymentType === 'coins') {
-      if (this.playerState.coins < feeCoins) {
+      const userCoins = getUserPoints();
+      if (userCoins < feeCoins) {
         soundFx.playError();
         this.showInsufficientError('coins', feeCoins);
         return false;
       }
-      this.playerState.coins -= feeCoins;
+      spendPoints(feeCoins, `Match Entry Fee: ${targetGame}`);
+      this.playerState.coins = getUserPoints();
     } else if (paymentType === 'gems') {
-      if (this.playerState.gems < feeGems) {
+      const userGems = getUserGems();
+      if (userGems < feeGems) {
         soundFx.playError();
         this.showInsufficientError('gems', feeGems);
         return false;
       }
-      this.playerState.gems -= feeGems;
+      spendGems(feeGems, `Match Entry Fee: ${targetGame}`);
+      this.playerState.gems = getUserGems();
     } else {
       alert('Invalid payment type selected.');
       return false;
@@ -433,6 +558,14 @@ export const GameEconomy = {
     this.updateUI();
     this.closeEntryModal();
     this.playerState.isMatchInProgress = true;
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('match_fee_paid', {
+          detail: { paymentType, targetGame, feeCoins, feeGems },
+        })
+      );
+    }
 
     // Trigger payment success UI opening (mode modals, boards, toggles)
     if (typeof (window as any).onPaymentSuccess === 'function') {
@@ -629,7 +762,7 @@ export const GameEconomy = {
   },
 
   payEntryFee(gameId: number | string = 1, paymentType: 'coins' | 'gems' = 'coins'): boolean {
-    return this.confirmAndStartGame(paymentType);
+    return this.confirmAndStartGame(paymentType, String(gameId));
   },
 };
 

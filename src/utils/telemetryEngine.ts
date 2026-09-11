@@ -153,6 +153,19 @@ class TelemetryEngine {
 
   constructor() {
     this.startLiveTicking();
+    if (typeof window !== 'undefined') {
+      try {
+        let storedHandle = localStorage.getItem('chess_pro_default_guest_handle');
+        if (!storedHandle || storedHandle.toLowerCase().startsWith('guest_')) {
+          const rawHex = storedHandle && storedHandle.length >= 14 ? storedHandle.substring(6) : Math.random().toString(16).substring(2, 10);
+          storedHandle = `GUEST_${rawHex.toUpperCase().padEnd(8, '0').slice(0, 8)}`;
+          localStorage.setItem('chess_pro_default_guest_handle', storedHandle);
+        }
+        this.updateLocalUserSession(storedHandle, undefined, true, 'chess', 'Main Platform Lobby');
+      } catch (e) {
+        this.updateLocalUserSession('GUEST_31CEC91C', undefined, true, 'chess', 'Main Platform Lobby');
+      }
+    }
   }
 
   private startLiveTicking() {
@@ -311,8 +324,24 @@ class TelemetryEngine {
   ) {
     if (!username) return;
 
+    const formattedUsername = isGuest
+      ? (username.toUpperCase().startsWith('GUEST_') ? username.toUpperCase() : `GUEST_${username.replace(/^guest_/i, '').toUpperCase()}`)
+      : username;
+
     const matchedCountry = SUPPORTED_COUNTRIES.find((c) => c.code === countryCode) || SUPPORTED_COUNTRIES[0];
-    const existingIndex = this.users.findIndex((u) => u.username.toLowerCase() === username.toLowerCase());
+    let existingIndex = this.users.findIndex(
+      (u) =>
+        u.username.toLowerCase() === formattedUsername.toLowerCase() ||
+        u.username.toLowerCase() === username.toLowerCase() ||
+        u.userId === `usr_real_${formattedUsername.replace(/\s+/g, '_')}`
+    );
+
+    // If permanent account just logged in, update the local guest slot
+    if (existingIndex < 0 && !isGuest) {
+      existingIndex = this.users.findIndex(
+        (u) => u.userId.startsWith('usr_real_GUEST_') || u.userId.startsWith('usr_real_guest_')
+      );
+    }
 
     const totalTime = stats?.totalTimeSeconds || 60;
     const wins = stats?.wins || 0;
@@ -333,8 +362,8 @@ class TelemetryEngine {
     };
 
     const userObj: TelemetryUser = {
-      userId: `usr_real_${username.replace(/\s+/g, '_')}`,
-      username: username + (isGuest ? ' (Guest)' : ''),
+      userId: `usr_real_${formattedUsername.replace(/\s+/g, '_')}`,
+      username: formattedUsername,
       country: matchedCountry,
       globalRank: existingIndex >= 0 ? this.users[existingIndex].globalRank : 1,
       regionalRank: existingIndex >= 0 ? this.users[existingIndex].regionalRank : 1,

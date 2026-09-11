@@ -9,6 +9,7 @@ import {
   increment 
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
+import { GameEconomy } from '../utils/gameEconomy';
 
 // Central cache for all game mode entry fees (synced with Firestore)
 export const gameFeeConfig: Record<string, number> = {
@@ -26,18 +27,35 @@ export function initGameFeeListeners() {
 
   const economyRef = doc(db, "platform_state", "economy");
 
-  // Real-time listener for admin fee changes
+  // Real-time listener for admin fee changes from Firestore
   onSnapshot(economyRef, (snapshot) => {
     if (snapshot.exists()) {
       const data = snapshot.data();
-      if (data.gameEntryFeeCoins !== undefined) gameFeeConfig.QUICK_MATCH = Number(data.gameEntryFeeCoins);
-      if (data.chessProFeeCoins !== undefined) gameFeeConfig.CHESS_PRO = Number(data.chessProFeeCoins);
+      const coins = Number(data.gameEntryFeeCoins ?? data.entryFeeCoins ?? gameFeeConfig.QUICK_MATCH);
+      const gems = Number(data.gameEntryFeeGems ?? data.entryFeeGems ?? coins);
+      const isFree = data.isFreeMode === true || data.freeMode === true;
+
+      gameFeeConfig.QUICK_MATCH = coins;
+      gameFeeConfig.CHESS_PRO = Number(data.chessProFeeCoins ?? coins);
       if (data.wheelSpinFeeCoins !== undefined) gameFeeConfig.WHEEL_SPIN = Number(data.wheelSpinFeeCoins);
       if (data.passAndPlayFeeCoins !== undefined) gameFeeConfig.PASS_PLAY = Number(data.passAndPlayFeeCoins);
 
+      GameEconomy.setFees(coins, gems, isFree, data.gameOverrides || data.gameFeeOverrides);
       renderFeeLabelsOnUI();
     }
   }, (err) => console.error("Error listening to game fees:", err));
+
+  // Also listen for immediate client-side event dispatches from AdminPanel
+  window.addEventListener('admin_fee_updated', () => {
+    gameFeeConfig.QUICK_MATCH = GameEconomy.getFeeCoins();
+    gameFeeConfig.CHESS_PRO = GameEconomy.getFeeCoins();
+    renderFeeLabelsOnUI();
+  });
+  window.addEventListener('admin_economy_updated', () => {
+    gameFeeConfig.QUICK_MATCH = GameEconomy.getFeeCoins();
+    gameFeeConfig.CHESS_PRO = GameEconomy.getFeeCoins();
+    renderFeeLabelsOnUI();
+  });
 
   // Real-time listener for user coin/gem balance
   onAuthStateChanged(auth, (user) => {
@@ -57,12 +75,25 @@ export function initGameFeeListeners() {
  * Updates UI labels showing entry fees across the lobby.
  */
 export function renderFeeLabelsOnUI() {
+  if (typeof document === 'undefined') return;
+
+  const isFree = GameEconomy.isFreeMode();
+  const feeCoins = isFree ? 0 : GameEconomy.getFeeCoins();
+  const feeGems = isFree ? 0 : GameEconomy.getFeeGems();
+  const isZero = isFree || (feeCoins === 0 && feeGems === 0);
+
+  const feeBadgeText = isZero
+    ? 'Free (0 Coins)'
+    : `${feeCoins.toLocaleString()} Coins${feeGems > 0 ? ` / ${feeGems.toLocaleString()} Gems` : ''}`;
+
   const quickMatchLabel = document.getElementById("labelQuickMatchFee");
   const chessProLabel = document.getElementById("labelChessProFee");
+  const entryFeeDisplay = document.getElementById("entryFeeDisplay");
   const wheelSpinLabel = document.getElementById("labelWheelSpinFee");
 
-  if (quickMatchLabel) quickMatchLabel.textContent = `${gameFeeConfig.QUICK_MATCH} Coins`;
-  if (chessProLabel) chessProLabel.textContent = `${gameFeeConfig.CHESS_PRO} Coins`;
+  if (quickMatchLabel) quickMatchLabel.textContent = feeBadgeText;
+  if (entryFeeDisplay) entryFeeDisplay.textContent = feeBadgeText;
+  if (chessProLabel) chessProLabel.textContent = feeBadgeText;
   if (wheelSpinLabel) wheelSpinLabel.textContent = `${gameFeeConfig.WHEEL_SPIN} Coins`;
 }
 

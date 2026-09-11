@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GameEconomy } from '../utils/gameEconomy';
 import { getUserPoints, getUserGems } from '../utils/pointsManager';
 
@@ -11,6 +11,13 @@ export const GameEntryModal: React.FC<GameEntryModalProps> = ({
   onOpenWheel,
   onMatchStarted,
 }) => {
+  const [activeGameTitle, setActiveGameTitle] = useState<string>(
+    GameEconomy.playerState.activeGameTitle || 'Game'
+  );
+  const [coins, setCoins] = useState<number>(getUserPoints());
+  const [gems, setGems] = useState<number>(getUserGems());
+  const [, setEconomyTick] = useState<number>(0);
+
   useEffect(() => {
     if (onMatchStarted) {
       GameEconomy.setMatchStartListener(onMatchStarted);
@@ -18,10 +25,56 @@ export const GameEntryModal: React.FC<GameEntryModalProps> = ({
     if (onOpenWheel) {
       GameEconomy.setWheelOpenListener(onOpenWheel);
     }
+
+    const handleEconomyUpdate = () => {
+      setCoins(getUserPoints());
+      setGems(getUserGems());
+      setEconomyTick((t) => t + 1);
+    };
+
+    const handleModalOpened = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.gameTitle) {
+        setActiveGameTitle(customEvent.detail.gameTitle);
+      } else if (GameEconomy.playerState.activeGameTitle) {
+        setActiveGameTitle(GameEconomy.playerState.activeGameTitle);
+      }
+      setCoins(getUserPoints());
+      setGems(getUserGems());
+      setEconomyTick((t) => t + 1);
+    };
+
+    window.addEventListener('admin_fee_updated', handleEconomyUpdate);
+    window.addEventListener('admin_economy_updated', handleEconomyUpdate);
+    window.addEventListener('global_config_updated', handleEconomyUpdate);
+    window.addEventListener('chess_points_updated', handleEconomyUpdate);
+    window.addEventListener('chess_gems_updated', handleEconomyUpdate);
+    window.addEventListener('game_entry_modal_opened', handleModalOpened);
+    window.addEventListener('storage', handleEconomyUpdate);
+
+    return () => {
+      window.removeEventListener('admin_fee_updated', handleEconomyUpdate);
+      window.removeEventListener('admin_economy_updated', handleEconomyUpdate);
+      window.removeEventListener('global_config_updated', handleEconomyUpdate);
+      window.removeEventListener('chess_points_updated', handleEconomyUpdate);
+      window.removeEventListener('chess_gems_updated', handleEconomyUpdate);
+      window.removeEventListener('game_entry_modal_opened', handleModalOpened);
+      window.removeEventListener('storage', handleEconomyUpdate);
+    };
   }, [onMatchStarted, onOpenWheel]);
 
-  const coins = getUserPoints();
-  const gems = getUserGems();
+  const isFree = GameEconomy.isFreeMode();
+  const feeCoins = isFree ? 0 : GameEconomy.getFeeCoins(activeGameTitle);
+  const feeGems = isFree ? 0 : GameEconomy.getFeeGems(activeGameTitle);
+  const isZero = isFree || (feeCoins === 0 && feeGems === 0);
+
+  const coinsButtonLabel = isZero
+    ? 'Play Free (0 🪙)'
+    : `Play with ${feeCoins.toLocaleString()} 🪙`;
+
+  const gemsButtonLabel = isZero
+    ? 'Play Free (0 💎)'
+    : `Play with ${feeGems.toLocaleString()} 💎`;
 
   return (
     <div
@@ -59,7 +112,7 @@ export const GameEntryModal: React.FC<GameEntryModalProps> = ({
             id="entryGameTitle"
             style={{ color: '#60a5fa', margin: '0 0 8px 0', fontSize: '20px', fontWeight: 'bold' }}
           >
-            🎮 Play Game
+            🎮 Play {activeGameTitle}
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '20px' }}>
             Choose currency to start match:
@@ -69,11 +122,11 @@ export const GameEntryModal: React.FC<GameEntryModalProps> = ({
             <button
               id="btnPlayWithCoins"
               type="button"
-              onClick={() => GameEconomy.confirmAndStartGame('coins')}
+              onClick={() => GameEconomy.confirmAndStartGame('coins', activeGameTitle)}
               style={{
                 flex: 1,
-                background: '#eab308',
-                color: '#000',
+                background: isZero ? '#10b981' : '#eab308',
+                color: isZero ? '#fff' : '#000',
                 border: 'none',
                 padding: '12px',
                 borderRadius: '8px',
@@ -81,15 +134,15 @@ export const GameEntryModal: React.FC<GameEntryModalProps> = ({
                 cursor: 'pointer',
               }}
             >
-              Play with 100 🪙
+              {coinsButtonLabel}
             </button>
             <button
               id="btnPlayWithGems"
               type="button"
-              onClick={() => GameEconomy.confirmAndStartGame('gems')}
+              onClick={() => GameEconomy.confirmAndStartGame('gems', activeGameTitle)}
               style={{
                 flex: 1,
-                background: '#3b82f6',
+                background: isZero ? '#059669' : '#3b82f6',
                 color: '#fff',
                 border: 'none',
                 padding: '12px',
@@ -98,7 +151,7 @@ export const GameEntryModal: React.FC<GameEntryModalProps> = ({
                 cursor: 'pointer',
               }}
             >
-              Play with 50 💎
+              {gemsButtonLabel}
             </button>
           </div>
 

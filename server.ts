@@ -740,13 +740,25 @@ function checkGuestRateLimit(ip: string): boolean {
   return true;
 }
 
-// Helper: Format unbounded, collision-free guest username (e.g., guest_483b825)
+// Helper: Normalize guest username to GUEST_XXXXXXXX uppercase format
+function normalizeGuestUsername(name?: string): string {
+  if (!name) return generateGuestUsername();
+  if (name.toUpperCase().startsWith('GUEST_')) {
+    return `GUEST_${name.substring(6).toUpperCase()}`;
+  }
+  if (name.toLowerCase().startsWith('guest_')) {
+    return `GUEST_${name.substring(6).toUpperCase()}`;
+  }
+  return name;
+}
+
+// Helper: Format unbounded, collision-free guest username (e.g., GUEST_31CEC91C)
 function generateGuestUsername(): string {
   let username = '';
   do {
     guestCounter += 1;
-    const hash = crypto.randomBytes(4).toString('hex');
-    username = `guest_${hash}`;
+    const hash = crypto.randomBytes(4).toString('hex').toUpperCase();
+    username = `GUEST_${hash}`;
   } while (usersByUsername.has(username.toLowerCase()));
   return username;
 }
@@ -805,6 +817,15 @@ function getOrCreateGuestSessionDualLayer(
       session.expiresAt = Date.now() + GUEST_SESSION_TTL_MS;
       const user = usersById.get(session.guestId);
       if (user) {
+        if (user.isGuest && user.username) {
+          const normalized = normalizeGuestUsername(user.username);
+          if (normalized !== user.username) {
+            usersByUsername.delete(user.username.toLowerCase());
+            user.username = normalized;
+            session.displayHandle = normalized;
+            usersByUsername.set(normalized.toLowerCase(), user);
+          }
+        }
         const sig = generateGuestSignature(user.id, deviceSignature);
         return { user, session, tokenSignature: sig, isNew: false };
       }
@@ -815,6 +836,14 @@ function getOrCreateGuestSessionDualLayer(
   if (existingToken && usersByToken.has(existingToken)) {
     const user = usersByToken.get(existingToken)!;
     if (user.isGuest) {
+      if (user.username) {
+        const normalized = normalizeGuestUsername(user.username);
+        if (normalized !== user.username) {
+          usersByUsername.delete(user.username.toLowerCase());
+          user.username = normalized;
+          usersByUsername.set(normalized.toLowerCase(), user);
+        }
+      }
       let session = guestSessionsById.get(user.id);
       if (!session || session.revoked || Date.now() > session.expiresAt) {
         const freshHighEntropyToken = generateHighEntropyToken('g_');
@@ -1484,6 +1513,13 @@ app.get('/api/auth/me', (req, res) => {
   }
   if (!user.isGuest) {
     updateDailyStreak(user);
+  } else if (user.username) {
+    const normalized = normalizeGuestUsername(user.username);
+    if (normalized !== user.username) {
+      usersByUsername.delete(user.username.toLowerCase());
+      user.username = normalized;
+      usersByUsername.set(normalized.toLowerCase(), user);
+    }
   }
   res.json({
     token: user.token,

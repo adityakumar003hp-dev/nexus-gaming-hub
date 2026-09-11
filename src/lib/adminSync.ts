@@ -3,6 +3,7 @@
 
 import { db } from './firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { GameEconomy } from '../utils/gameEconomy';
 
 export interface EconomyRates {
   coinsPerGem?: number;
@@ -67,9 +68,13 @@ export function initAdminSyncListeners() {
       if (data.activeGame && window.updateMainAppGameMode) {
         window.updateMainAppGameMode(data.activeGame);
       }
-      const entryFeeDisplay = document.getElementById("entryFeeDisplay");
-      if (entryFeeDisplay && data.entryFeeCoins !== undefined) {
-        entryFeeDisplay.textContent = `${data.entryFeeCoins} Coins`;
+      if (data.entryFeeCoins !== undefined) {
+        GameEconomy.setFees(
+          Number(data.entryFeeCoins),
+          Number(data.entryFeeGems ?? data.entryFeeCoins),
+          data.isFreeMode === true || data.freeMode === true,
+          data.gameOverrides || data.gameFeeOverrides
+        );
       }
     }
   }, (err) => console.warn("AdminSync global_config listener warning:", err));
@@ -80,11 +85,16 @@ export function initAdminSyncListeners() {
       const data = docSnap.data();
       const coinsPerGem = data.coinsPerGem;
       const gameEntryFeeCoins = data.gameEntryFeeCoins;
+      const gameEntryFeeGems = data.gameEntryFeeGems;
+      const isFree = data.isFreeMode === true || data.freeMode === true;
       
-      // Update match entry fees and economy rates on UI elements
-      const entryFeeDisplay = document.getElementById("entryFeeDisplay");
-      if (entryFeeDisplay && gameEntryFeeCoins !== undefined) {
-        entryFeeDisplay.textContent = `${gameEntryFeeCoins} Coins`;
+      if (gameEntryFeeCoins !== undefined) {
+        GameEconomy.setFees(
+          Number(gameEntryFeeCoins),
+          Number(gameEntryFeeGems ?? gameEntryFeeCoins),
+          isFree,
+          data.gameOverrides || data.gameFeeOverrides
+        );
       }
       
       window.currentEconomyRates = { coinsPerGem, gameEntryFeeCoins };

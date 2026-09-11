@@ -25,14 +25,25 @@ export function getStoredToken(): string | null {
 
 const DEFAULT_GUEST_HANDLE_KEY = 'chess_pro_default_guest_handle';
 
+export function formatGuestUsername(name?: string | null): string {
+  if (!name) return getDefaultGuestHandle();
+  if (name.toUpperCase().startsWith('GUEST_')) {
+    return `GUEST_${name.substring(6).toUpperCase()}`;
+  }
+  if (name.toLowerCase().startsWith('guest_')) {
+    return `GUEST_${name.substring(6).toUpperCase()}`;
+  }
+  return name;
+}
+
 export function getDefaultGuestHandle(): string {
   if (typeof localStorage === 'undefined') {
-    return 'guest_f15158eb';
+    return 'GUEST_31CEC91C';
   }
   let handle = localStorage.getItem(DEFAULT_GUEST_HANDLE_KEY);
-  if (!handle) {
-    const randomHex = Math.random().toString(16).substring(2, 10);
-    handle = `guest_${randomHex}`;
+  if (!handle || handle.toLowerCase().startsWith('guest_')) {
+    const rawHex = handle && handle.length >= 14 ? handle.substring(6) : Math.random().toString(16).substring(2, 10);
+    handle = `GUEST_${rawHex.toUpperCase().padEnd(8, '0').slice(0, 8)}`;
     localStorage.setItem(DEFAULT_GUEST_HANDLE_KEY, handle);
   }
   return handle;
@@ -221,8 +232,13 @@ export async function fetchGuestAuth(): Promise<UserSession> {
     body: JSON.stringify({ token }),
   });
   const data = await res.json();
-  if (data.token) {
-    setStoredToken(data.token);
+  if (data) {
+    if (data.isGuest && data.username) {
+      data.username = formatGuestUsername(data.username);
+    }
+    if (data.token) {
+      setStoredToken(data.token);
+    }
   }
   return data;
 }
@@ -369,7 +385,11 @@ export async function fetchCurrentUser(): Promise<UserSession | null> {
   if (!token) return null;
   const res = await apiFetch('/api/auth/me');
   if (!res.ok) return null;
-  return res.json();
+  const data = await res.json();
+  if (data && data.isGuest && data.username) {
+    data.username = formatGuestUsername(data.username);
+  }
+  return data;
 }
 
 export async function fetchUserStats(gameType: string = 'all'): Promise<UserStats> {
