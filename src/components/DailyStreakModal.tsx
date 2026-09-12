@@ -1,27 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Gift, Flame, CheckCircle2, Clock, Sparkles, Trophy, Award, ArrowRight } from 'lucide-react';
-import { getUserPoints, getUserGems, setUserPoints, setUserGems } from '../utils/pointsManager';
 import { soundFx } from '../utils/audio';
-
-interface DailyRewardDay {
-  day: number;
-  coins: number;
-  gems: number;
-  badge?: string;
-  isGrandPrize?: boolean;
-}
-
-const STREAK_DAYS: DailyRewardDay[] = [
-  { day: 1, coins: 500, gems: 0 },
-  { day: 2, coins: 1000, gems: 2 },
-  { day: 3, coins: 2000, gems: 5 },
-  { day: 4, coins: 3500, gems: 10 },
-  { day: 5, coins: 5000, gems: 15 },
-  { day: 6, coins: 7500, gems: 25 },
-  { day: 7, coins: 15000, gems: 100, badge: 'Streak Legend Badge', isGrandPrize: true },
-];
-
-const STREAK_STORAGE_KEY = 'user_daily_streak_data';
+import {
+  STREAK_DAYS,
+  DailyRewardDay,
+  DailyStreakData,
+  getDailyStreakData,
+  getDailyStreakCount,
+  claimDailyStreakReward,
+  isDailyStreakClaimAvailable,
+  getTimeUntilNextClaimMs,
+} from '../utils/streakManager';
 
 export interface DailyStreakModalProps {
   isOpen: boolean;
@@ -36,35 +25,34 @@ export const DailyStreakModal: React.FC<DailyStreakModalProps> = ({
   onClaim,
   onNotification,
 }) => {
-  const [streakData, setStreakData] = useState<{
-    currentDay: number;
-    lastClaimTimestamp: number;
-    claimedDays: number[];
-  }>(() => {
-    try {
-      const raw = localStorage.getItem(STREAK_STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return { currentDay: 1, lastClaimTimestamp: 0, claimedDays: [] };
-  });
-
+  const [streakData, setStreakData] = useState<DailyStreakData>(() => getDailyStreakData());
   const [isOpeningChest, setIsOpeningChest] = useState<boolean>(false);
   const [revealedChestReward, setRevealedChestReward] = useState<{ coins: number; gems: number; badge?: string } | null>(null);
+  const [countdownText, setCountdownText] = useState<string>('');
 
   useEffect(() => {
     if (!isOpen) return;
-    try {
-      const raw = localStorage.getItem(STREAK_STORAGE_KEY);
-      if (raw) setStreakData(JSON.parse(raw));
-    } catch {}
+    setStreakData(getDailyStreakData());
+
+    const timer = setInterval(() => {
+      const ms = getTimeUntilNextClaimMs();
+      if (ms <= 0) {
+        setCountdownText('Ready now!');
+      } else {
+        const hours = Math.floor(ms / (1000 * 60 * 60));
+        const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((ms % (1000 * 60)) / 1000);
+        setCountdownText(`${hours}h ${minutes}m ${seconds}s`);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const now = Date.now();
-  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-  const timeSinceLastClaim = now - streakData.lastClaimTimestamp;
-  const canClaimToday = streakData.lastClaimTimestamp === 0 || timeSinceLastClaim >= ONE_DAY_MS;
+  const canClaimToday = isDailyStreakClaimAvailable();
+  const currentStreakDays = getDailyStreakCount();
 
   const handleClaimDay = (reward: DailyRewardDay) => {
     if (!canClaimToday) {
@@ -88,24 +76,8 @@ export const DailyStreakModal: React.FC<DailyStreakModalProps> = ({
   };
 
   const finishClaim = (reward: DailyRewardDay) => {
-    // Add coins and gems
-    const curCoins = getUserPoints();
-    const curGems = getUserGems();
-    setUserPoints(curCoins + reward.coins, `Claimed Day ${reward.day} Streak Reward`);
-    if (reward.gems > 0) {
-      setUserGems(curGems + reward.gems, `Claimed Day ${reward.day} Streak Reward`);
-    }
-
-    const nextClaimedDays = [...streakData.claimedDays, reward.day];
-    const nextDay = reward.day >= 7 ? 1 : reward.day + 1;
-    const nextState = {
-      currentDay: nextDay,
-      lastClaimTimestamp: Date.now(),
-      claimedDays: reward.day >= 7 ? [] : nextClaimedDays,
-    };
-
+    const nextState = claimDailyStreakReward(reward);
     setStreakData(nextState);
-    localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(nextState));
 
     if (onNotification) {
       onNotification(
@@ -131,10 +103,14 @@ export const DailyStreakModal: React.FC<DailyStreakModalProps> = ({
               <Flame className="w-6 h-6 fill-current text-slate-950" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-black text-white uppercase tracking-wider font-mono flex items-center flex-wrap gap-2">
                 <span>7-Day Login Streak Rewards</span>
                 <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-400/40">
                   DAY {streakData.currentDay}/7
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-orange-500/20 text-orange-400 border border-orange-400/40 flex items-center gap-1">
+                  <Flame className="w-3 h-3 fill-orange-400 text-orange-400" />
+                  <span>{currentStreakDays} DAY{currentStreakDays === 1 ? '' : 'S'} ACTIVE</span>
                 </span>
               </h2>
               <p className="text-xs text-slate-400 font-mono">
@@ -153,20 +129,20 @@ export const DailyStreakModal: React.FC<DailyStreakModalProps> = ({
         {/* Content */}
         <div className="p-4 sm:p-6 space-y-5">
           {/* Status banner */}
-          <div className="p-4 rounded-2xl bg-[#070b14] border border-slate-800 flex items-center justify-between">
+          <div className="p-4 rounded-2xl bg-[#070b14] border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                <Flame className="w-5 h-5" />
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                <Flame className="w-5 h-5 fill-amber-400" />
               </div>
               <div>
-                <p className="text-xs font-mono font-bold text-white">
-                  Streak Status:{' '}
+                <p className="text-xs font-mono font-bold text-white flex items-center gap-2">
+                  <span>Streak Status:</span>
                   <span className={canClaimToday ? 'text-emerald-400' : 'text-amber-400'}>
-                    {canClaimToday ? 'Ready to Claim Today!' : 'Claimed for Today (Next in < 24h)'}
+                    {canClaimToday ? 'Ready to Claim Today!' : `Claimed for Today (Next in ${countdownText || '< 24h'})`}
                   </span>
                 </p>
                 <p className="text-[11px] text-slate-400 font-mono">
-                  Keep your daily streak uninterrupted to preserve Day 7 unlock progress.
+                  Consecutive Streak: <strong className="text-amber-300">{currentStreakDays} Day{currentStreakDays === 1 ? '' : 's'}</strong> • Keep streak uninterrupted to preserve Day 7 unlock progress.
                 </p>
               </div>
             </div>

@@ -4,11 +4,13 @@ import { UserSession } from '../types';
 import { isSiteOwner } from '../utils/owner';
 import { getUserPoints, getUserGems } from '../utils/pointsManager';
 import { getDefaultGuestHandle } from '../utils/auth';
+import { getDailyStreakCount, isDailyStreakClaimAvailable, getDailyStreakData } from '../utils/streakManager';
 
 interface OwnerHeroCardProps {
   currentUser?: UserSession | null;
   onOpenProfile?: () => void;
   onOpenDailyWheel?: () => void;
+  onOpenDailyStreak?: () => void;
   onOpenExchange?: (direction?: 'gemToCoin' | 'coinToGem') => void;
   onOpenLeaderboard?: () => void;
   onOpenGoogleAuth?: () => void;
@@ -21,6 +23,7 @@ export const OwnerHeroCard: React.FC<OwnerHeroCardProps> = ({
   currentUser = null,
   onOpenProfile,
   onOpenDailyWheel,
+  onOpenDailyStreak,
   onOpenExchange,
   onOpenLeaderboard,
   onOpenGoogleAuth,
@@ -30,7 +33,12 @@ export const OwnerHeroCard: React.FC<OwnerHeroCardProps> = ({
 }) => {
   const username = currentUser?.username || (currentUser?.isGuest ? getDefaultGuestHandle() : getDefaultGuestHandle());
   const isOwner = currentUser ? isSiteOwner(currentUser.username || currentUser.email) : false;
-  const streak = currentUser?.stats?.streakDays || currentUser?.dailyStreak || 1;
+
+  const [streak, setStreak] = useState<number>(() => {
+    return currentUser?.dailyStreak || currentUser?.stats?.streakDays || getDailyStreakCount();
+  });
+  const [canClaimStreak, setCanClaimStreak] = useState<boolean>(() => isDailyStreakClaimAvailable());
+  const [streakData, setStreakData] = useState(() => getDailyStreakData());
 
   const [score, setScore] = useState<number>(() => {
     return getUserPoints();
@@ -42,6 +50,9 @@ export const OwnerHeroCard: React.FC<OwnerHeroCardProps> = ({
   useEffect(() => {
     setScore(getUserPoints());
     setGems(getUserGems());
+    setStreak(currentUser?.dailyStreak || currentUser?.stats?.streakDays || getDailyStreakCount());
+    setCanClaimStreak(isDailyStreakClaimAvailable());
+    setStreakData(getDailyStreakData());
 
     const handlePointsUpdated = (e: any) => {
       const newPoints = e.detail?.points ?? getUserPoints();
@@ -53,12 +64,21 @@ export const OwnerHeroCard: React.FC<OwnerHeroCardProps> = ({
       setGems(newGems);
     };
 
+    const handleStreakUpdated = (e: any) => {
+      const updatedStreak = e.detail?.streak ?? getDailyStreakCount();
+      setStreak(updatedStreak);
+      setCanClaimStreak(isDailyStreakClaimAvailable());
+      setStreakData(e.detail?.streakData ?? getDailyStreakData());
+    };
+
     window.addEventListener('chess_points_updated', handlePointsUpdated);
     window.addEventListener('chess_gems_updated', handleGemsUpdated);
+    window.addEventListener('chess_streak_updated', handleStreakUpdated);
 
     return () => {
       window.removeEventListener('chess_points_updated', handlePointsUpdated);
       window.removeEventListener('chess_gems_updated', handleGemsUpdated);
+      window.removeEventListener('chess_streak_updated', handleStreakUpdated);
     };
   }, [currentUser]);
 
@@ -169,17 +189,44 @@ export const OwnerHeroCard: React.FC<OwnerHeroCardProps> = ({
             <div className="flex flex-wrap items-center gap-3 pt-2">
               {/* Daily Streak Card */}
               <div 
-                onClick={onOpenDailyWheel}
-                className="bg-[#060919]/90 border border-amber-500/40 hover:border-amber-400 rounded-2xl px-4 py-3 flex items-center gap-3.5 shadow-lg cursor-pointer transition active:scale-95 group"
-                title="Daily Streak • Click to spin rewards wheel"
+                id="hero-daily-streak-card"
+                onClick={() => {
+                  if (onOpenDailyStreak) onOpenDailyStreak();
+                  else if (onOpenDailyWheel) onOpenDailyWheel();
+                }}
+                className={`bg-[#060919]/90 border rounded-2xl px-4 py-3 flex items-center gap-3.5 shadow-lg cursor-pointer transition active:scale-95 group relative overflow-hidden ${
+                  canClaimStreak 
+                    ? 'border-amber-400 hover:border-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.35)] ring-1 ring-amber-400/50' 
+                    : 'border-amber-500/40 hover:border-amber-400'
+                }`}
+                title="Daily Streak • Click to open 7-Day Login Streak Rewards"
               >
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 flex items-center justify-center text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.5)] border border-amber-300 shrink-0">
-                  <Flame className="w-6 h-6 text-slate-950 fill-amber-950/30 animate-pulse" />
+                <div className={`w-11 h-11 rounded-xl bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 flex items-center justify-center text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.5)] border border-amber-300 shrink-0 relative ${
+                  canClaimStreak ? 'animate-pulse' : ''
+                }`}>
+                  <Flame className="w-6 h-6 text-slate-950 fill-amber-950/30" />
+                  {canClaimStreak && (
+                    <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-500 border border-slate-950"></span>
+                    </span>
+                  )}
                 </div>
                 <div className="text-left">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">DAILY STREAK</div>
-                  <div className="text-lg font-black text-amber-400 leading-tight">{streak} Day</div>
-                  <div className="text-[10px] text-slate-400 font-semibold">Keep it up!</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <span>DAILY STREAK</span>
+                    {canClaimStreak && (
+                      <span className="text-[9px] font-black uppercase text-amber-300 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-400/40 animate-pulse">
+                        CLAIM READY
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-lg font-black text-amber-400 leading-tight">
+                    {streak} Day{streak === 1 ? '' : 's'}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-semibold">
+                    {canClaimStreak ? `Claim Day ${streakData.currentDay}! 🔥` : 'Keep it up!'}
+                  </div>
                 </div>
               </div>
 

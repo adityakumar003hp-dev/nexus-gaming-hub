@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserStats, MatchRecord } from '../types';
 import { fetchUserStats, fetchMatchHistory } from '../utils/auth';
+import { getDailyStreakCount } from '../utils/streakManager';
 import {
   X,
   Trophy,
@@ -23,6 +24,7 @@ interface StatsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onReplayMatch: (match: MatchRecord) => void;
+  onOpenDailyStreak?: () => void;
 }
 
 export const SIXTEEN_GAMES = [

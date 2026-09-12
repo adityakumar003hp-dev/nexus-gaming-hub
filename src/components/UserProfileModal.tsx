@@ -29,6 +29,7 @@ import { MatchRecord } from '../types';
 import { soundFx } from '../utils/audio';
 import { getUserPoints } from '../utils/pointsManager';
 import { getDefaultGuestHandle } from '../utils/auth';
+import { getDailyStreakCount } from '../utils/streakManager';
 
 export interface GameMetadataItem {
   id: string;
@@ -81,6 +82,7 @@ interface UserProfileModalProps {
   onClose: () => void;
   gameType?: string;
   onSelectGame?: (gameId: string) => void;
+  onOpenDailyStreak?: () => void;
 }
 
 function formatTime(totalSeconds: number): string {
@@ -99,6 +101,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onClose,
   gameType: defaultGame = 'all',
   onSelectGame,
+  onOpenDailyStreak,
 }) => {
   const [targetUsername, setTargetUsername] = useState(initialUsername || getDefaultGuestHandle());
   const [selectedGame, setSelectedGame] = useState<string>(defaultGame || 'all');
@@ -123,9 +126,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     if (!isOpen) return;
 
     try {
-      const storedStreak = parseInt(localStorage.getItem('chess_daily_streak') || '1', 10);
-      setDailyStreak(isOwnerUser ? 1 : Math.max(1, storedStreak || 1));
-      
+      setDailyStreak(getDailyStreakCount());
       const livePoints = getUserPoints();
       setTotalScore(livePoints);
     } catch {
@@ -138,7 +139,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       setTotalScore(newPoints);
     };
 
+    const handleStreakUpdated = (e: any) => {
+      const newStreak = e.detail?.streak ?? getDailyStreakCount();
+      setDailyStreak(newStreak);
+    };
+
     window.addEventListener('chess_points_updated', handlePointsUpdated);
+    window.addEventListener('chess_streak_updated', handleStreakUpdated);
 
     // Build per-game stats
     const stats: Record<string, GameStatDetail> = {};
@@ -199,6 +206,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
     return () => {
       window.removeEventListener('chess_points_updated', handlePointsUpdated);
+      window.removeEventListener('chess_streak_updated', handleStreakUpdated);
     };
   }, [isOpen, targetUsername, isOwnerUser]);
 
@@ -386,13 +394,27 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               {/* Right Column: Daily Streak Counter & Elo Score in Dual-Column Card */}
               <div className="flex items-center gap-3 sm:gap-4 shrink-0 w-full sm:w-auto justify-start sm:justify-end">
                 {/* Daily Streak Counter Card */}
-                <div className="flex-1 sm:flex-initial bg-[#070b14] border border-slate-800/90 hover:border-amber-500/40 rounded-xl p-3.5 sm:px-4 sm:py-3.5 flex items-center gap-3 shadow-lg transition">
-                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <div 
+                  onClick={() => {
+                    if (onOpenDailyStreak) {
+                      onClose();
+                      onOpenDailyStreak();
+                    }
+                  }}
+                  className={`flex-1 sm:flex-initial bg-[#070b14] border border-slate-800/90 hover:border-amber-500/60 rounded-xl p-3.5 sm:px-4 sm:py-3.5 flex items-center gap-3 shadow-lg transition ${
+                    onOpenDailyStreak ? 'cursor-pointer active:scale-95 group' : ''
+                  }`}
+                  title={onOpenDailyStreak ? "Click to view and claim 7-Day Login Streak Rewards" : undefined}
+                >
+                  <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:border-amber-400 transition">
                     <Flame className="w-6 h-6 text-amber-400 animate-pulse" />
                   </div>
                   <div className="text-left">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Daily Streak</div>
-                    <div className="text-lg font-black text-amber-400 leading-tight font-mono">{dailyStreak} Day</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                      <span>Daily Streak</span>
+                      {onOpenDailyStreak && <span className="text-[9px] text-amber-400 font-bold">VIEW</span>}
+                    </div>
+                    <div className="text-lg font-black text-amber-400 leading-tight font-mono">{dailyStreak} Day{dailyStreak === 1 ? '' : 's'}</div>
                     <div className="text-[9px] text-slate-500 font-medium">Consecutive login</div>
                   </div>
                 </div>
@@ -503,13 +525,27 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               </div>
 
               {/* 8. Daily Streak */}
-              <div className="p-3.5 rounded-2xl bg-[#090e1c] border border-amber-950/40 hover:border-amber-500/40 transition space-y-1 text-left">
+              <div 
+                onClick={() => {
+                  if (onOpenDailyStreak) {
+                    onClose();
+                    onOpenDailyStreak();
+                  }
+                }}
+                className={`p-3.5 rounded-2xl bg-[#090e1c] border border-amber-950/40 hover:border-amber-500/60 transition space-y-1 text-left ${
+                  onOpenDailyStreak ? 'cursor-pointer active:scale-95 group' : ''
+                }`}
+                title={onOpenDailyStreak ? "Click to view and claim 7-Day Login Streak Rewards" : undefined}
+              >
                 <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 font-mono uppercase tracking-wider">
                   <span>DAILY STREAK</span>
-                  <Flame className="w-4 h-4 text-amber-400" />
+                  <Flame className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
                 </div>
-                <div className="text-2xl font-black text-amber-400 font-mono">{dailyStreak} Day</div>
-                <div className="text-[10px] text-slate-500 font-mono">Active login streak</div>
+                <div className="text-2xl font-black text-amber-400 font-mono">{dailyStreak} Day{dailyStreak === 1 ? '' : 's'}</div>
+                <div className="text-[10px] text-slate-500 font-mono flex items-center justify-between">
+                  <span>Active login streak</span>
+                  {onOpenDailyStreak && <span className="text-amber-400 text-[9px] font-bold uppercase">REWARDS →</span>}
+                </div>
               </div>
 
             </div>
