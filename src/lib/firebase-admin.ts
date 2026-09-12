@@ -110,7 +110,8 @@ export class RestDocRef {
   }
 
   async get(): Promise<FirestoreDocumentSnapshot> {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId || '(default)'}/documents/${this.path}?key=${firebaseConfig.apiKey}`;
+    const databaseId = (firebaseConfig as any).firestoreDatabaseId || '(default)';
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${databaseId}/documents/${this.path}?key=${firebaseConfig.apiKey}`;
     try {
       const res = await fetch(url);
       if (res.status === 404) {
@@ -148,7 +149,8 @@ export class RestDocRef {
     }
 
     const fields = toFirestoreFields(finalData);
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId || '(default)'}/documents/${this.path}?key=${firebaseConfig.apiKey}`;
+    const databaseId = (firebaseConfig as any).firestoreDatabaseId || '(default)';
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${databaseId}/documents/${this.path}?key=${firebaseConfig.apiKey}`;
     const res = await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

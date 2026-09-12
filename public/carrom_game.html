@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smooth Carrom Engine - 60 FPS HTML5 Canvas</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1b120c;
+      color: #f5eedb;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .hud {
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .hud h1 {
+      font-size: 1.25rem;
+      color: #e5b97c;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .hud p {
+      font-size: 0.85rem;
+      color: #a8947e;
+      margin-top: 4px;
+    }
+    .canvas-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #1b120c;
+    }
+    #carromCanvas {
+      border: 16px solid #3e2723;
+      border-radius: 12px;
+      background: #f4e4bc;
+      box-shadow: 0 12px 35px rgba(0,0,0,0.6);
+      touch-action: none;
+      cursor: crosshair;
+      max-width: 92vw;
+      max-height: 75vh;
+      aspect-ratio: 1 / 1;
+    }
+    .controls {
+      margin-top: 14px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .btn {
+      background: #3e2723;
+      border: 1px solid #6d4c41;
+      color: #f5eedb;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: #4e342e;
+      border-color: #8d6e63;
+    }
+    .btn:active {
+      transform: scale(0.96);
+    }
+  </style>
+</head>
+<body>
+  <div class="hud">
+    <h1>Carrom Physics Engine v2.5</h1>
+    <p>Drag striker backward to aim arrow with predictive pathing & release to strike</p>
+  </div>
+
+  <div class="canvas-container">
+    <canvas id="carromCanvas" width="600" height="600"></canvas>
+  </div>
+
+  <div class="controls">
+    <button class="btn" onclick="if(window.resetCarromGame) window.resetCarromGame();">Reset Board Pucks</button>
+  </div>
+
+  <script src="carrom_game.js"></script>
+</body>
+</html>

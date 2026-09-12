@@ -39,6 +39,7 @@ import { isSiteOwner } from '../utils/owner';
 import { OwnerBadge } from './OwnerBadge';
 import { getUserPoints, getUserGems } from '../utils/pointsManager';
 import { getDefaultGuestHandle } from '../utils/auth';
+import { getDailyStreakCount } from '../utils/streakManager';
 
 interface GameHeaderProps {
   activeBoardGame: ActiveBoardGame;
@@ -398,7 +399,23 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
   const brand = GAME_BRANDING[activeBoardGame] || GAME_BRANDING.chess;
   const username = currentUser?.username || (currentUser?.isGuest ? getDefaultGuestHandle() : getDefaultGuestHandle());
   const isOwner = currentUser ? isSiteOwner(currentUser.username || currentUser.email) : false;
-  const streak = currentUser?.stats?.streakDays || currentUser?.dailyStreak || 1;
+  const [streak, setStreak] = useState<number>(() => {
+    return currentUser?.dailyStreak || currentUser?.stats?.streakDays || getDailyStreakCount();
+  });
+
+  useEffect(() => {
+    setStreak(currentUser?.dailyStreak || currentUser?.stats?.streakDays || getDailyStreakCount());
+
+    const handleStreakUpdated = (e: any) => {
+      const newStreak = e.detail?.streak ?? getDailyStreakCount();
+      setStreak(newStreak);
+    };
+
+    window.addEventListener('chess_streak_updated', handleStreakUpdated);
+    return () => {
+      window.removeEventListener('chess_streak_updated', handleStreakUpdated);
+    };
+  }, [currentUser]);
 
   return (
     <header className="w-full bg-[#030712]/95 border-b border-slate-800/90 px-4 md:px-6 py-2.5 sticky top-0 z-40 backdrop-blur-2xl transition-all shadow-xl">
@@ -601,11 +618,23 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
                         {isOwner ? '#1 Verified' : 'UNRANKED'}
                       </div>
                     </div>
-                    <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                      <div className="text-slate-400 font-bold">Daily Streak</div>
+                    <div 
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        if (onOpenDailyStreak) onOpenDailyStreak();
+                      }}
+                      className={`bg-slate-900/60 p-1.5 rounded-lg border border-slate-800 ${
+                        onOpenDailyStreak ? 'cursor-pointer hover:border-amber-400/60 hover:bg-slate-800/80 transition group' : ''
+                      }`}
+                      title={onOpenDailyStreak ? "Click to open 7-Day Login Streak Rewards" : undefined}
+                    >
+                      <div className="text-slate-400 font-bold flex items-center justify-between">
+                        <span>Daily Streak</span>
+                        {onOpenDailyStreak && <span className="text-[9px] text-amber-400 font-bold">OPEN</span>}
+                      </div>
                       <div className="text-amber-400 font-black flex items-center gap-1">
-                        <Flame className="w-3 h-3 text-amber-400" />
-                        <span>{streak} Day</span>
+                        <Flame className="w-3 h-3 text-amber-400 group-hover:scale-110 transition-transform" />
+                        <span>{streak} Day{streak === 1 ? '' : 's'}</span>
                       </div>
                     </div>
                   </div>

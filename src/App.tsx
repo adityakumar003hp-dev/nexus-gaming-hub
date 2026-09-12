@@ -88,6 +88,7 @@ import { FloatingSuiteAndTelemetryMenu } from './components/FloatingSuiteAndTele
 import { AIElementBot } from './components/AIElementBot';
 import { CosmeticsShopModal } from './components/CosmeticsShopModal';
 import { DailyStreakModal } from './components/DailyStreakModal';
+import { getDailyStreakCount } from './utils/streakManager';
 import { FriendsModal } from './components/FriendsModal';
 import { RankedLadderModal } from './components/RankedLadderModal';
 import { InGameReactionsBar } from './components/InGameReactionsBar';
@@ -448,7 +449,25 @@ export default function App() {
       });
     };
 
+    const handleStreakUpdated = (e: any) => {
+      const updatedStreak = e.detail?.streak ?? getDailyStreakCount();
+      setCurrentUser((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          dailyStreak: updatedStreak,
+          stats: prev.stats
+            ? {
+                ...prev.stats,
+                streakDays: updatedStreak,
+              }
+            : undefined,
+        };
+      });
+    };
+
     window.addEventListener('chess_points_updated', handlePointsUpdated);
+    window.addEventListener('chess_streak_updated', handleStreakUpdated);
 
     (window as any).openMatchmakingModal = () => setIsMatchmakingOpen(true);
 
@@ -457,6 +476,7 @@ export default function App() {
       window.removeEventListener('token_compromised_alert', handleCompromiseAlert);
       window.removeEventListener('chess_hatrick_achieved', handleHatrickAchieved);
       window.removeEventListener('chess_points_updated', handlePointsUpdated);
+      window.removeEventListener('chess_streak_updated', handleStreakUpdated);
     };
   }, []);
 
@@ -1612,6 +1632,7 @@ export default function App() {
           currentUser={currentUser}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenDailyWheel={() => setIsDailyWheelOpen(true)}
+          onOpenDailyStreak={() => setIsDailyStreakOpen(true)}
           onOpenExchange={(dir) => {
             setExchangeDirection(dir || 'gemToCoin');
             setIsExchangeModalOpen(true);
@@ -2539,6 +2560,10 @@ export default function App() {
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
         gameType={activeBoardGame}
+        onOpenDailyStreak={() => {
+          setIsProfileModalOpen(false);
+          setIsDailyStreakOpen(true);
+        }}
       />
 
       {/* Statistics & Match History Modal */}
@@ -2546,6 +2571,10 @@ export default function App() {
         isOpen={isStatsModalOpen}
         onClose={() => setIsStatsModalOpen(false)}
         onReplayMatch={handleReplayMatch}
+        onOpenDailyStreak={() => {
+          setIsStatsModalOpen(false);
+          setIsDailyStreakOpen(true);
+        }}
       />
 
       {/* Matchmaking Modal */}
@@ -3038,9 +3067,18 @@ export default function App() {
         isOpen={isDailyStreakOpen}
         onClose={() => setIsDailyStreakOpen(false)}
         onClaim={(coins, gems) => {
+          const streakCount = getDailyStreakCount();
           if (currentUser) {
             setCurrentUser({
               ...currentUser,
+              dailyStreak: streakCount,
+              stats: currentUser.stats
+                ? {
+                    ...currentUser.stats,
+                    streakDays: streakCount,
+                    points: getUserPoints(),
+                  }
+                : undefined,
               gamerPoints: getUserPoints(),
               gems: getUserGems(),
             });

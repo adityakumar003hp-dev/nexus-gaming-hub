@@ -64,15 +64,18 @@ export const StatsModal: React.FC<StatsModalProps> = ({
   isOpen,
   onClose,
   onReplayMatch,
+  onOpenDailyStreak,
 }) => {
   const [selectedGame, setSelectedGame] = useState<string>('all');
   const [stats, setStats] = useState<UserStats | null>(null);
   const [history, setHistory] = useState<MatchRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [streakCount, setStreakCount] = useState<number>(() => getDailyStreakCount());
 
   useEffect(() => {
     if (isOpen) {
+      setStreakCount(getDailyStreakCount());
       setLoading(true);
       Promise.all([fetchUserStats(selectedGame), fetchMatchHistory(selectedGame)])
         .then(([s, h]) => {
@@ -81,6 +84,15 @@ export const StatsModal: React.FC<StatsModalProps> = ({
         })
         .finally(() => setLoading(false));
     }
+
+    const handleStreakUpdated = (e: any) => {
+      setStreakCount(e.detail?.streak ?? getDailyStreakCount());
+    };
+
+    window.addEventListener('chess_streak_updated', handleStreakUpdated);
+    return () => {
+      window.removeEventListener('chess_streak_updated', handleStreakUpdated);
+    };
   }, [isOpen, selectedGame]);
 
   if (!isOpen) return null;
@@ -284,16 +296,29 @@ export const StatsModal: React.FC<StatsModalProps> = ({
                 </div>
 
                 {/* Daily Streak */}
-                <div id="stat-daily-streak" className="bg-orange-950/20 border border-orange-500/40 p-4 rounded-2xl backdrop-blur-md shadow-sm">
+                <div 
+                  id="stat-daily-streak" 
+                  onClick={() => {
+                    if (onOpenDailyStreak) {
+                      onClose();
+                      onOpenDailyStreak();
+                    }
+                  }}
+                  className={`bg-orange-950/20 border border-orange-500/40 p-4 rounded-2xl backdrop-blur-md shadow-sm transition ${
+                    onOpenDailyStreak ? 'cursor-pointer hover:border-amber-400 active:scale-95 group' : ''
+                  }`}
+                  title={onOpenDailyStreak ? "Click to open 7-Day Login Streak Rewards" : undefined}
+                >
                   <div className="text-[10px] font-black uppercase tracking-wider text-orange-300 flex items-center justify-between">
                     <span>Daily Streak</span>
-                    <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                    <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="text-xl font-black text-amber-300 mt-1">
-                    {stats?.dailyStreak || 1} Day{(stats?.dailyStreak || 1) === 1 ? '' : 's'}
+                    {streakCount} Day{streakCount === 1 ? '' : 's'}
                   </div>
-                  <div className="text-[10px] text-orange-300/70 mt-1 leading-tight">
-                    The days played consecutively if any day will not comes losses streak and reset streak to 0
+                  <div className="text-[10px] text-orange-300/70 mt-1 leading-tight flex items-center justify-between">
+                    <span>Consecutive login streak</span>
+                    {onOpenDailyStreak && <span className="text-amber-400 font-bold uppercase text-[9px]">REWARDS →</span>}
                   </div>
                 </div>
               </div>

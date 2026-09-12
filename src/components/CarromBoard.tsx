@@ -11,14 +11,18 @@ import {
   Copy,
   Check,
   Code,
+  Music,
+  Sliders,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { soundFx } from '../utils/audio';
+import { carromAudio, CarromSoundTheme, CarromSoundSettings } from '../utils/carromAudio';
+import { CarromSoundSettingsModal } from './CarromSoundSettingsModal';
 import { BotAISettingsBar } from './BotAISettingsBar';
 
 export type CarromGameMode = 'classic' | 'points' | 'freestyle';
 export type CarromOpponent = 'ai' | 'local' | 'solo';
-export type CarromPieceLayout = 'tournament' | 'standard';
+export type CarromPieceLayout = 'classic_ring' | 'standard' | 'tournament';
 
 interface CarromPiece {
   id: number;
@@ -73,7 +77,9 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
   );
   const [aiDifficulty, setAiDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [pieceLayout, setPieceLayout] = useState<CarromPieceLayout>('tournament');
-  const [soundActive, setSoundActive] = useState<boolean>(true);
+  const [soundActive, setSoundActive] = useState<boolean>(() => carromAudio.getSettings().enabled);
+  const [showSoundModal, setShowSoundModal] = useState<boolean>(false);
+  const [soundTheme, setSoundTheme] = useState<CarromSoundTheme>(() => carromAudio.getSettings().theme);
   const [showGuideModal, setShowGuideModal] = useState<boolean>(false);
   const [vfxEnabled, setVfxEnabled] = useState<boolean>(true);
   const [quickPowerSelected, setQuickPowerSelected] = useState<number>(85);
@@ -591,19 +597,34 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const piecePocketedThisShotRef = useRef<CarromPiece[]>([]);
 
-  // Sound synthesis
-  const playCarromSound = (type: 'strike' | 'clack' | 'pocket' | 'foul' | 'win') => {
-    if (!soundActive) return;
-    try {
-      if (type === 'strike') soundFx.playMove();
-      else if (type === 'clack') soundFx.playCheck();
-      else if (type === 'pocket') soundFx.playCapture();
-      else if (type === 'foul') soundFx.playCheck();
-      else if (type === 'win') soundFx.playGameOver(true);
-    } catch {
-      // Safe fallback
-    }
-  };
+  // Realistic Carrom Acoustic Sound Engine (Flick, Clack, Cushion Rim, Pocket Net, Foul, Win)
+  const playCarromSound = useCallback(
+    (
+      type: 'strike' | 'clack' | 'rim' | 'pocket' | 'foul' | 'win',
+      payload?: number | 'white' | 'black' | 'queen'
+    ) => {
+      if (!soundActive) return;
+      try {
+        if (type === 'strike') {
+          carromAudio.playStrikerRelease(typeof payload === 'number' ? payload : 50);
+        } else if (type === 'clack') {
+          carromAudio.playCoinClack(typeof payload === 'number' ? payload : 5);
+        } else if (type === 'rim') {
+          carromAudio.playRimBounce(typeof payload === 'number' ? payload : 5);
+        } else if (type === 'pocket') {
+          const pType = typeof payload === 'string' ? payload : 'white';
+          carromAudio.playPocketSink(pType);
+        } else if (type === 'foul') {
+          carromAudio.playFoulPenalty();
+        } else if (type === 'win') {
+          carromAudio.playVictoryFanfare();
+        }
+      } catch {
+        // Safe fallback
+      }
+    },
+    [soundActive]
+  );
 
   // Initialize Piece Layouts
   const initBoardPieces = useCallback(
@@ -649,6 +670,7 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
 
       // Outer Ring of 12 Pieces if Tournament Layout (19 pcs total)
       // If Standard Layout: 2 more pieces (9 pcs total)
+      // If Classic Ring (carrom_game.js): 7 pcs total (1 Queen + 6 surrounding ring)
       if (layout === 'tournament') {
         const outerDist = 48;
         for (let i = 0; i < 12; i++) {
@@ -667,7 +689,7 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
             active: true,
           });
         }
-      } else {
+      } else if (layout === 'standard') {
         // Standard (9 pieces total: 1 Queen, 4 White, 4 Black)
         const outerDist = 46;
         for (let i = 0; i < 2; i++) {
@@ -687,6 +709,7 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
           });
         }
       }
+      // If layout === 'classic_ring', the 7 center pieces (1 Queen + 6 alternating ring) are all that's needed!
 
       piecesRef.current = pieces;
     },
@@ -784,7 +807,7 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
     piecePocketedThisShotRef.current = [];
 
     setIsGameRunning(true);
-    playCarromSound('strike');
+    playCarromSound('strike', clampedPower);
     setMatchStatusText(`Shot Released with ${Math.round(clampedPower)}% Power!`);
   };
 
@@ -911,7 +934,8 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
 
     // Process Carrom Men pocketed
     if (pocketedThisTurn.length > 0) {
-      playCarromSound('pocket');
+      const topPiece = pocketedThisTurn.find((p) => p.type === 'queen') || pocketedThisTurn[0];
+      playCarromSound('pocket', topPiece?.type || 'white');
       setComboCount((c) => c + pocketedThisTurn.length);
 
       pocketedThisTurn.forEach((piece) => {
@@ -1004,10 +1028,10 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const FRICTION = 0.984;
+    const FRICTION = 0.982; // Smooth decelerating drag (carrom_game.js)
     const RESTITUTION = 0.92;
-    const WALL_RESTITUTION = 0.88;
-    const MIN_SPEED = 0.08;
+    const WALL_RESTITUTION = 0.85; // Border bounce -0.85 (carrom_game.js)
+    const MIN_SPEED = 0.05; // Stop micro-movements (carrom_game.js)
 
     const gameLoop = () => {
       const striker = strikerRef.current;
@@ -1037,24 +1061,24 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
             striker.x = wallMin + striker.radius;
             striker.vx = -striker.vx * WALL_RESTITUTION;
             triggerCollisionFlash(striker.x, striker.y, '#38bdf8');
-            playCarromSound('clack');
+            playCarromSound('rim', Math.hypot(striker.vx, striker.vy));
           } else if (striker.x > wallMax - striker.radius) {
             striker.x = wallMax - striker.radius;
             striker.vx = -striker.vx * WALL_RESTITUTION;
             triggerCollisionFlash(striker.x, striker.y, '#38bdf8');
-            playCarromSound('clack');
+            playCarromSound('rim', Math.hypot(striker.vx, striker.vy));
           }
 
           if (striker.y < wallMin + striker.radius) {
             striker.y = wallMin + striker.radius;
             striker.vy = -striker.vy * WALL_RESTITUTION;
             triggerCollisionFlash(striker.x, striker.y, '#38bdf8');
-            playCarromSound('clack');
+            playCarromSound('rim', Math.hypot(striker.vx, striker.vy));
           } else if (striker.y > wallMax - striker.radius) {
             striker.y = wallMax - striker.radius;
             striker.vy = -striker.vy * WALL_RESTITUTION;
             triggerCollisionFlash(striker.x, striker.y, '#38bdf8');
-            playCarromSound('clack');
+            playCarromSound('rim', Math.hypot(striker.vx, striker.vy));
           }
 
           POCKETS.forEach((pocket) => {
@@ -1088,24 +1112,24 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
             p.x = wallMin + p.radius;
             p.vx = -p.vx * WALL_RESTITUTION;
             triggerCollisionFlash(p.x, p.y, p.color === '#dc2626' ? '#ef4444' : '#f59e0b');
-            playCarromSound('clack');
+            playCarromSound('rim', Math.hypot(p.vx, p.vy));
           } else if (p.x > wallMax - p.radius) {
             p.x = wallMax - p.radius;
             p.vx = -p.vx * WALL_RESTITUTION;
             triggerCollisionFlash(p.x, p.y, p.color === '#dc2626' ? '#ef4444' : '#f59e0b');
-            playCarromSound('clack');
+            playCarromSound('rim', Math.hypot(p.vx, p.vy));
           }
 
           if (p.y < wallMin + p.radius) {
             p.y = wallMin + p.radius;
             p.vy = -p.vy * WALL_RESTITUTION;
             triggerCollisionFlash(p.x, p.y, p.color === '#dc2626' ? '#ef4444' : '#f59e0b');
-            playCarromSound('clack');
+            playCarromSound('rim', Math.hypot(p.vx, p.vy));
           } else if (p.y > wallMax - p.radius) {
             p.y = wallMax - p.radius;
             p.vy = -p.vy * WALL_RESTITUTION;
             triggerCollisionFlash(p.x, p.y, p.color === '#dc2626' ? '#ef4444' : '#f59e0b');
-            playCarromSound('clack');
+            playCarromSound('rim', Math.hypot(p.vx, p.vy));
           }
 
           POCKETS.forEach((pocket) => {
@@ -1149,8 +1173,9 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
               p.vx += pVel * m1 * nx * RESTITUTION;
               p.vy += pVel * m1 * ny * RESTITUTION;
 
+              const relSpeed = Math.hypot(kx, ky);
               triggerCollisionFlash((striker.x + p.x) / 2, (striker.y + p.y) / 2, '#38bdf8');
-              playCarromSound('clack');
+              playCarromSound('clack', relSpeed);
             }
           });
         }
@@ -1185,8 +1210,9 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
               p2.vx += pVel * nx * RESTITUTION;
               p2.vy += pVel * ny * RESTITUTION;
 
+              const relSpeed = Math.hypot(kx, ky);
               triggerCollisionFlash((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, '#f59e0b');
-              playCarromSound('clack');
+              playCarromSound('clack', relSpeed);
             }
           }
         }
@@ -1366,40 +1392,196 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
 
         ctx.restore();
 
-        // Aiming Trajectory Guide Line & Power Indicator
+        // Aiming Trajectory Guide Line & Predictive Collision Pathing (carrom_game.js specification)
         if (striker.isAiming || pointerDragRef.current.isPullingAim) {
           const aimAngle = striker.aimAngle;
           const power = striker.aimPower;
-          const lineLength = 40 + (power / 100) * 140;
+          const maxAimDist = 45 + (power / 100) * 165;
+          const dirX = Math.cos(aimAngle);
+          const dirY = Math.sin(aimAngle);
 
-          const targetX = striker.x + Math.cos(aimAngle) * lineLength;
-          const targetY = striker.y + Math.sin(aimAngle) * lineLength;
+          // 1. Predictive piece collision search
+          let closestHitDist = maxAimDist;
+          let hitPiece: CarromPiece | null = null;
+
+          for (const p of pieces) {
+            if (!p.active) continue;
+            const ocX = p.x - striker.x;
+            const ocY = p.y - striker.y;
+            const proj = ocX * dirX + ocY * dirY;
+            if (proj <= 0) continue; // Behind striker
+
+            const perpSq = ocX * ocX + ocY * ocY - proj * proj;
+            const combinedR = striker.radius + p.radius;
+            if (perpSq >= combinedR * combinedR) continue; // Misses piece
+
+            const halfChord = Math.sqrt(combinedR * combinedR - perpSq);
+            const hitDist = proj - halfChord;
+            if (hitDist > 0 && hitDist < closestHitDist) {
+              closestHitDist = hitDist;
+              hitPiece = p;
+            }
+          }
+
+          // 2. Predictive cushion wall boundary collision if no piece was hit earlier
+          const wallMin = 24 + striker.radius;
+          const wallMax = BOARD_SIZE - 24 - striker.radius;
+          let wallHitDist = Infinity;
+          let wallNormal = { x: 0, y: 0 };
+
+          if (dirX > 0.001) {
+            const d = (wallMax - striker.x) / dirX;
+            if (d < wallHitDist) {
+              wallHitDist = d;
+              wallNormal = { x: -1, y: 0 };
+            }
+          } else if (dirX < -0.001) {
+            const d = (wallMin - striker.x) / dirX;
+            if (d < wallHitDist) {
+              wallHitDist = d;
+              wallNormal = { x: 1, y: 0 };
+            }
+          }
+          if (dirY > 0.001) {
+            const d = (wallMax - striker.y) / dirY;
+            if (d < wallHitDist) {
+              wallHitDist = d;
+              wallNormal = { x: 0, y: -1 };
+            }
+          } else if (dirY < -0.001) {
+            const d = (wallMin - striker.y) / dirY;
+            if (d < wallHitDist) {
+              wallHitDist = d;
+              wallNormal = { x: 0, y: 1 };
+            }
+          }
+
+          const hasHitPiece = !!hitPiece && closestHitDist <= wallHitDist && closestHitDist <= maxAimDist;
+          const hasHitWall = !hasHitPiece && wallHitDist < closestHitDist && wallHitDist <= maxAimDist;
+          const finalDist = hasHitPiece ? closestHitDist : hasHitWall ? wallHitDist : maxAimDist;
+
+          const aimX = striker.x + dirX * finalDist;
+          const aimY = striker.y + dirY * finalDist;
 
           ctx.save();
-          // Trajectory Forward Line
-          ctx.setLineDash([5, 5]);
-          ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
-          ctx.lineWidth = 3;
+
+          // Dynamic Trajectory Dotted Line (carrom_game.js specification)
           ctx.beginPath();
+          ctx.setLineDash([8, 6]);
           ctx.moveTo(striker.x, striker.y);
-          ctx.lineTo(targetX, targetY);
+          ctx.lineTo(aimX, aimY);
+          ctx.strokeStyle = hasHitPiece ? 'rgba(46, 204, 113, 0.9)' : 'rgba(231, 76, 60, 0.85)';
+          ctx.lineWidth = 4;
           ctx.stroke();
 
-          // Target reticle / impact ring
+          // Target Circle Ring (Predictive Impact Contact Location)
           ctx.setLineDash([]);
-          ctx.strokeStyle = '#f59e0b';
-          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(targetX, targetY, 7, 0, Math.PI * 2);
+          ctx.arc(aimX, aimY, striker.radius, 0, Math.PI * 2);
+          ctx.strokeStyle = hasHitPiece ? '#2ecc71' : '#e74c3c';
+          ctx.lineWidth = 2.5;
           ctx.stroke();
 
-          ctx.fillStyle = '#ef4444';
+          // Arrow Head Pointer (carrom_game.js specification)
+          const arrowSize = 12;
           ctx.beginPath();
-          ctx.arc(targetX, targetY, 3.5, 0, Math.PI * 2);
+          ctx.moveTo(aimX, aimY);
+          ctx.lineTo(
+            aimX - arrowSize * Math.cos(aimAngle - Math.PI / 6),
+            aimY - arrowSize * Math.sin(aimAngle - Math.PI / 6)
+          );
+          ctx.lineTo(
+            aimX - arrowSize * Math.cos(aimAngle + Math.PI / 6),
+            aimY - arrowSize * Math.sin(aimAngle + Math.PI / 6)
+          );
+          ctx.closePath();
+          ctx.fillStyle = hasHitPiece ? '#2ecc71' : '#e74c3c';
           ctx.fill();
+
+          // Predictive Target Deflection Path & Pocket Aiming Detection
+          if (hasHitPiece && hitPiece) {
+            const normalX = hitPiece.x - aimX;
+            const normalY = hitPiece.y - aimY;
+            const normalLen = Math.hypot(normalX, normalY);
+
+            if (normalLen > 0.001) {
+              const nx = normalX / normalLen;
+              const ny = normalY / normalLen;
+              const defLen = 70;
+              const pDefX = hitPiece.x + nx * defLen;
+              const pDefY = hitPiece.y + ny * defLen;
+              const pAngle = Math.atan2(ny, nx);
+
+              // Draw predicted piece deflection line
+              ctx.beginPath();
+              ctx.setLineDash([4, 4]);
+              ctx.moveTo(hitPiece.x, hitPiece.y);
+              ctx.lineTo(pDefX, pDefY);
+              ctx.strokeStyle = 'rgba(46, 204, 113, 0.95)';
+              ctx.lineWidth = 3;
+              ctx.stroke();
+
+              // Deflected Arrow Pointer
+              ctx.beginPath();
+              ctx.moveTo(pDefX, pDefY);
+              ctx.lineTo(
+                pDefX - 8 * Math.cos(pAngle - Math.PI / 6),
+                pDefY - 8 * Math.sin(pAngle - Math.PI / 6)
+              );
+              ctx.lineTo(
+                pDefX - 8 * Math.cos(pAngle + Math.PI / 6),
+                pDefY - 8 * Math.sin(pAngle + Math.PI / 6)
+              );
+              ctx.closePath();
+              ctx.fillStyle = '#2ecc71';
+              ctx.fill();
+
+              // Check if deflected piece trajectory aligns with any pocket!
+              POCKETS.forEach((pocket) => {
+                const toPktX = pocket.x - hitPiece.x;
+                const toPktY = pocket.y - hitPiece.y;
+                const distToPkt = Math.hypot(toPktX, toPktY);
+                if (distToPkt > 10) {
+                  const projOnDef = toPktX * nx + toPktY * ny;
+                  if (projOnDef > 0) {
+                    const perpPktSq = distToPkt * distToPkt - projOnDef * projOnDef;
+                    if (perpPktSq < POCKET_RADIUS * POCKET_RADIUS * 1.3) {
+                      // Pocket alignment locked!
+                      ctx.beginPath();
+                      ctx.arc(pocket.x, pocket.y, POCKET_RADIUS + 4, 0, Math.PI * 2);
+                      ctx.strokeStyle = '#2ecc71';
+                      ctx.lineWidth = 3;
+                      ctx.setLineDash([4, 3]);
+                      ctx.stroke();
+
+                      ctx.fillStyle = '#2ecc71';
+                      ctx.font = 'bold 9px sans-serif';
+                      ctx.textAlign = 'center';
+                      ctx.fillText('POT LOCK', pocket.x, pocket.y > BOARD_SIZE / 2 ? pocket.y - 14 : pocket.y + 20);
+                    }
+                  }
+                }
+              });
+            }
+          } else if (hasHitWall) {
+            // Predictive Bank Shot Cushion Bounce Line
+            const dot = dirX * wallNormal.x + dirY * wallNormal.y;
+            const refDirX = dirX - 2 * dot * wallNormal.x;
+            const refDirY = dirY - 2 * dot * wallNormal.y;
+            const bounceLen = 50;
+
+            ctx.beginPath();
+            ctx.setLineDash([4, 4]);
+            ctx.moveTo(aimX, aimY);
+            ctx.lineTo(aimX + refDirX * bounceLen, aimY + refDirY * bounceLen);
+            ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+          }
 
           // Pull-back indicator line
           if (pointerDragRef.current.isPullingAim) {
+            ctx.setLineDash([]);
             ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -1414,12 +1596,13 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
           }
 
           // Power readout badge
+          ctx.setLineDash([]);
           ctx.fillStyle = '#0f172a';
           ctx.beginPath();
           ctx.roundRect ? ctx.roundRect(striker.x - 36, striker.y + 20, 72, 18, 6) : ctx.rect(striker.x - 36, striker.y + 20, 72, 18);
           ctx.fill();
-          ctx.strokeStyle = '#3b82f6';
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = hasHitPiece ? '#2ecc71' : '#3b82f6';
+          ctx.lineWidth = 1.5;
           ctx.stroke();
 
           ctx.fillStyle = '#f8fafc';
@@ -1557,13 +1740,26 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
               <p className="m-0 text-[11px] text-[#8c92a4]">Multi-Format Physics Simulation &amp; Striker Arena</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
-              onClick={() => setSoundActive(!soundActive)}
+              onClick={() => {
+                const next = !soundActive;
+                setSoundActive(next);
+                carromAudio.saveSettings({ enabled: next });
+                if (next) carromAudio.playCoinClack(6);
+              }}
               className="bg-[#161c2d] border border-[#242f4c] hover:border-[#3498db] hover:bg-[#222d4a] text-white w-[34px] h-[34px] rounded-[8px] flex items-center justify-center cursor-pointer transition text-sm"
-              title={soundActive ? 'Toggle Sound (Mute)' : 'Toggle Sound (Unmute)'}
+              title={soundActive ? 'Mute Sound' : 'Unmute Sound'}
             >
               {soundActive ? <Volume2 className="w-4 h-4 text-[#3498db]" /> : <VolumeX className="w-4 h-4 text-[#8c92a4]" />}
+            </button>
+            <button
+              onClick={() => setShowSoundModal(true)}
+              className="bg-[#161c2d] border border-[#242f4c] hover:border-amber-500 hover:bg-[#222d4a] text-amber-400 px-2.5 h-[34px] rounded-[8px] flex items-center gap-1.5 cursor-pointer transition text-xs font-semibold shadow-sm"
+              title="Change & Replace Carrom Board Sound Profiles"
+            >
+              <Music className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="hidden sm:inline capitalize text-[11px] font-mono">{soundTheme}</span>
             </button>
             <button
               onClick={() => setShowGuideModal(true)}
@@ -1632,6 +1828,7 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
             >
               <option value="tournament">Tournament (19 Pcs)</option>
               <option value="standard">Standard (9 Pcs)</option>
+              <option value="classic_ring">Classic Ring (7 Pcs)</option>
             </select>
           </div>
         </div>
@@ -1791,7 +1988,15 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
           </div>
 
           {/* Action Grid */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <button
+              id="soundStudioBtn"
+              onClick={() => setShowSoundModal(true)}
+              className="bg-gradient-to-br from-[#1e2538] to-[#141b2c] border border-amber-600/40 hover:border-amber-400 text-amber-300 p-2.5 rounded-[8px] text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 transition hover:from-[#2a344f] hover:to-[#1b253d] active:scale-95 shadow-sm"
+              title="Change and replace carrom sound effects & theme"
+            >
+              <Music className="w-3.5 h-3.5 text-amber-400" /> Sound Studio
+            </button>
             <button
               id="resetBoardBtn"
               onClick={() => resetMatch()}
@@ -1816,7 +2021,7 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
             </button>
             <button
               onClick={() => setVfxEnabled(!vfxEnabled)}
-              className={`bg-gradient-to-br from-[#1b2438] to-[#131929] border border-[#242f4c] hover:border-[#3498db] text-[#3498db] p-2.5 rounded-[8px] text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 transition active:scale-95 ${
+              className={`col-span-2 sm:col-span-2 bg-gradient-to-br from-[#1b2438] to-[#131929] border border-[#242f4c] hover:border-[#3498db] text-[#3498db] p-2.5 rounded-[8px] text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 transition active:scale-95 ${
                 vfxEnabled ? 'border-[#3498db]/60 shadow-[0_0_10px_rgba(52,152,219,0.2)]' : 'opacity-70'
               }`}
             >
@@ -1828,9 +2033,20 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
         {/* Arena Footer */}
         <div className="bg-[#090b10] px-4 sm:px-5 py-3 border-t border-[#242f4c] flex justify-between text-[10px] text-[#8c92a4]">
           <span>Web Carrom Physics Module v2.5</span>
+          <span className="text-amber-400">Audio: {soundTheme.toUpperCase()}</span>
           <span className="text-[#2ecc71]">Active Frame Rate: 60 FPS</span>
         </div>
       </div>
+
+      {/* Carrom Sound Settings & Replacer Modal */}
+      <CarromSoundSettingsModal
+        isOpen={showSoundModal}
+        onClose={() => setShowSoundModal(false)}
+        onSettingsChange={(newSettings) => {
+          setSoundTheme(newSettings.theme);
+          setSoundActive(newSettings.enabled);
+        }}
+      />
 
       {/* Rules Guide Modal */}
       {showGuideModal && (

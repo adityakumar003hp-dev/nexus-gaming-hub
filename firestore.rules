@@ -52,6 +52,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Connection health test
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+
     // User cloud game data backup
     match /user_data/{userId} {
       allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());

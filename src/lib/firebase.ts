@@ -9,9 +9,11 @@ import {
 } from 'firebase/auth';
 import { 
   getFirestore, 
+  initializeFirestore,
   doc, 
   setDoc, 
   getDoc, 
+  getDocFromServer,
   onSnapshot 
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -24,6 +26,9 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
 export const WORKSPACE_SCOPES = [
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/forms.body',
   'https://www.googleapis.com/auth/forms.body.readonly',
   'https://www.googleapis.com/auth/forms.responses.readonly'
@@ -37,7 +42,7 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-// In-memory access token caching (Never store in localStorage or sessionStorage)
+// In-memory access token caching (Strictly in-memory, never stored in localStorage/sessionStorage)
 let cachedAccessToken: string | null = null;
 let isSigningIn = false;
 
@@ -48,12 +53,10 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      const token = cachedAccessToken || localStorage.getItem('google_access_token');
-      if (token) {
-        cachedAccessToken = token;
-        if (onAuthSuccess) onAuthSuccess(user, token);
+      if (cachedAccessToken) {
+        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
-        // Token must be acquired via user interaction popup
+        cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
     } else {
@@ -64,37 +67,42 @@ export const initAuth = (
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  if (cachedAccessToken) return cachedAccessToken;
-  try {
-    const stored = localStorage.getItem('google_access_token');
-    if (stored) {
-      cachedAccessToken = stored;
-      return stored;
-    }
-  } catch (e) {
-    console.warn('localStorage read error:', e);
-  }
-  return null;
+  return cachedAccessToken;
 };
 
 export const setCachedAccessToken = (token: string | null) => {
   cachedAccessToken = token;
-  try {
-    if (token) {
-      localStorage.setItem('google_access_token', token);
-    } else {
-      localStorage.removeItem('google_access_token');
-    }
-  } catch (e) {
-    console.warn('localStorage write error:', e);
-  }
 };
 
-// Firestore Database (with databaseId specified in config if custom)
-const customDatabaseId = (firebaseConfig as any).firestoreDatabaseId;
-export const db = customDatabaseId 
-  ? getFirestore(app, customDatabaseId)
-  : getFirestore(app);
+// Firestore Database initialization with custom database ID and resilient Long Polling
+// Prevents WebChannelConnection RPC 'Listen' 400 Bad Request stream breakdowns in proxy/iframe environments
+const customDatabaseId = (firebaseConfig as any).firestoreDatabaseId || 'ai-studio-apex20-59c88b98-7988-483e-b428-645f22518f3c';
+
+function initializeFirestoreClient() {
+  const settings = {
+    experimentalForceLongPolling: true,
+    experimentalAutoDetectLongPolling: true,
+  };
+
+  try {
+    if (customDatabaseId && customDatabaseId !== '(default)') {
+      return initializeFirestore(app, settings, customDatabaseId);
+    }
+    return initializeFirestore(app, settings);
+  } catch (initErr) {
+    // If already initialized (e.g. during HMR or re-imports), retrieve existing instance
+    try {
+      return customDatabaseId && customDatabaseId !== '(default)'
+        ? getFirestore(app, customDatabaseId)
+        : getFirestore(app);
+    } catch (fallbackErr) {
+      console.warn('Firestore fallback instance retrieval warning:', fallbackErr);
+      return getFirestore(app);
+    }
+  }
+}
+
+export const db = initializeFirestoreClient();
 
 // Expose Firebase instances globally for admin bridge and external module integration
 if (typeof window !== 'undefined') {
@@ -102,6 +110,17 @@ if (typeof window !== 'undefined') {
   (window as any).db = db;
   (window as any).auth = auth;
 }
+
+export async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'platform_state', 'lockdown'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn("Please check your Firebase configuration or network status.");
+    }
+  }
+}
+testConnection();
 
 // Helper function: Sign in with Google with popup and return credential + token
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
