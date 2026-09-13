@@ -32,10 +32,15 @@ import { ChessPiece } from '../utils/chessPieces';
 import {
   getUserPoints,
   spendPoints,
+  addPoints,
+  getUserGems,
+  spendGems,
+  addGems,
   getHatrickState,
   getActiveRandomQuests,
   checkDailyWheelStatus,
   resetAllPurchasesAndPoints,
+  syncBalancesToBackend,
 } from '../utils/pointsManager';
 import {
   MASTER_96_CATALOG,
@@ -52,6 +57,7 @@ interface AnimationEffectsMasterHubModalProps {
   onClose: () => void;
   onOpenDailyWheel?: () => void;
   onOpenQuests?: () => void;
+  onOpenExchange?: () => void;
 }
 
 // Glowing piece visual artwork component
@@ -139,9 +145,11 @@ export function AnimationEffectsMasterHubModal({
   onClose,
   onOpenDailyWheel,
   onOpenQuests,
+  onOpenExchange,
 }: AnimationEffectsMasterHubModalProps) {
-  // Points & Wallet State
+  // Points & Wallet State (Coins and Gems synchronized)
   const [points, setPoints] = useState<number>(() => getUserPoints());
+  const [gems, setGems] = useState<number>(() => getUserGems());
 
   // Inventory & Equipped Map (localStorage persistent)
   const [inventory, setInventory] = useState<Record<string, boolean>>(() => {
@@ -185,7 +193,7 @@ export function AnimationEffectsMasterHubModal({
 
   // Activity Log
   const [activityLog, setActivityLog] = useState<string>(
-    'Welcome! No animations or effects are unlocked or equipped by default. Unlock any animation or effect for 5,000 Points in the Shop to equip to your piece loadouts.'
+    'Welcome! No animations or effects are unlocked or equipped by default. Unlock any animation or effect with Coins or Gems in the Shop to equip to your piece loadouts.'
   );
 
   // Earn Modal / Feedback
@@ -199,12 +207,13 @@ export function AnimationEffectsMasterHubModal({
   const [sandboxAnimKey, setSandboxAnimKey] = useState<number>(1);
   const [isSandboxTesting, setIsSandboxTesting] = useState<boolean>(false);
 
-  // Sync Points and Tasks live
+  // Sync Points, Gems, and Tasks live
   useEffect(() => {
     if (!isOpen) return;
 
     const refreshData = () => {
       setPoints(getUserPoints());
+      setGems(getUserGems());
       setHatrickData(getHatrickState());
       setWheelStatus(checkDailyWheelStatus());
       setActiveQuests(getActiveRandomQuests());
@@ -212,16 +221,23 @@ export function AnimationEffectsMasterHubModal({
 
     refreshData();
 
-    const handlePointsUpdate = () => refreshData();
+    const handlePointsUpdate = () => {
+      setPoints(getUserPoints());
+    };
+    const handleGemsUpdate = () => {
+      setGems(getUserGems());
+    };
     const handleQuestsUpdate = () => refreshData();
     const handleHatrickUpdate = () => refreshData();
 
     window.addEventListener('chess_points_updated', handlePointsUpdate);
+    window.addEventListener('chess_gems_updated', handleGemsUpdate);
     window.addEventListener('chess_quests_updated', handleQuestsUpdate);
     window.addEventListener('chess_hatrick_achieved', handleHatrickUpdate);
 
     return () => {
       window.removeEventListener('chess_points_updated', handlePointsUpdate);
+      window.removeEventListener('chess_gems_updated', handleGemsUpdate);
       window.removeEventListener('chess_quests_updated', handleQuestsUpdate);
       window.removeEventListener('chess_hatrick_achieved', handleHatrickUpdate);
     };
@@ -265,21 +281,48 @@ export function AnimationEffectsMasterHubModal({
   // Owned items in inventory
   const ownedItems = MASTER_96_CATALOG.filter((item) => inventory[item.id]);
 
-  const handleBuy = (item: CatalogItem) => {
+  const handleBuy = (item: CatalogItem, currency: 'coins' | 'gems' = 'coins') => {
     if (inventory[item.id]) {
       handleToggleEquip(item);
       return;
     }
+    const gemPrice = Math.max(5, Math.round(item.price / 100));
+
+    if (currency === 'gems') {
+      if (gems >= gemPrice) {
+        const success = spendGems(gemPrice, `Unlocked ${item.name}`);
+        if (success) {
+          const nextGems = getUserGems();
+          setGems(nextGems);
+          setInventory((prev) => ({ ...prev, [item.id]: true }));
+          playCinematicSound('capture');
+          setActivityLog(`🎉 Successfully unlocked "${item.name}" for ${gemPrice} GEMS! Unlocked in inventory.`);
+          syncBalancesToBackend(nextGems, getUserPoints());
+        }
+      } else {
+        setActivityLog(`⚠️ Insufficient gems! Requires ${gemPrice} GEMS (you have ${gems}). You can earn gems or convert coins.`);
+        if (onOpenExchange) {
+          onOpenExchange();
+        } else {
+          setIsEarnModalOpen(true);
+        }
+      }
+      return;
+    }
+
+    // Default: Coins purchase
     if (points >= item.price) {
       const success = spendPoints(item.price, `Unlocked ${item.name}`);
       if (success) {
-        setPoints(getUserPoints());
+        const nextPoints = getUserPoints();
+        setPoints(nextPoints);
         setInventory((prev) => ({ ...prev, [item.id]: true }));
         playCinematicSound('capture');
-        setActivityLog(`🎉 Successfully purchased "${item.name}" for ${item.price} PTS! Unlocked in inventory.`);
+        setActivityLog(`🎉 Successfully purchased "${item.name}" for ${item.price.toLocaleString()} PTS! Unlocked in inventory.`);
+        syncBalancesToBackend(getUserGems(), nextPoints);
       }
     } else {
-      setActivityLog('⚠️ Insufficient points! Points are earned by spinning the Daily Wheel, completing Hatrick, or finishing Random Quests.');
+      setActivityLog(`⚠️ Insufficient coins! Requires ${item.price.toLocaleString()} PTS (you have ${points.toLocaleString()}). You can spin the Daily Wheel, complete quests, or unlock with ${gemPrice} GEMS.`);
       setIsEarnModalOpen(true);
     }
   };
@@ -376,31 +419,70 @@ export function AnimationEffectsMasterHubModal({
               </div>
             </div>
 
-            {/* Center: Points Balance & Earn Button */}
-            <div className="flex items-center gap-3">
-              {/* Points Box */}
-              <div className="bg-[#0b1328] border border-[#23355d] px-4 py-2 rounded-2xl shadow-inner flex flex-col justify-center">
-                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                  Points Balance
-                </span>
-                <div className="flex items-center gap-1.5 text-base sm:text-lg font-black text-[#f1c40f]">
-                  <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-300 text-slate-950 flex items-center justify-center text-xs font-black shadow-sm">
-                    $
-                  </div>
-                  <span>{points.toLocaleString()}</span>
-                  <span className="text-xs text-amber-300 font-bold">PTS</span>
+            {/* Center: Live Coins and Gems Balances + Earn Action */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center">
+              {/* Coins Box */}
+              <div className="bg-[#0b1328] border border-[#23355d] hover:border-amber-500/50 px-3 sm:px-3.5 py-1.5 rounded-2xl shadow-inner flex items-center gap-2.5 transition">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-400 text-slate-950 flex items-center justify-center text-sm font-black shadow-[0_0_12px_rgba(245,158,11,0.5)] border border-amber-300 shrink-0">
+                  🪙
                 </div>
+                <div className="flex flex-col text-left">
+                  <span className="text-[9px] uppercase tracking-wider text-amber-400/90 font-black leading-none">
+                    COINS
+                  </span>
+                  <span className="text-sm sm:text-base font-black text-[#f1c40f] leading-none mt-0.5 font-mono">
+                    {points.toLocaleString()}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEarnModalOpen(true)}
+                  className="w-5 h-5 rounded-md bg-amber-500/20 hover:bg-amber-500/40 border border-amber-400/50 text-amber-300 flex items-center justify-center text-xs font-black transition active:scale-95 ml-0.5 cursor-pointer"
+                  title="Earn Coins via Daily Wheel, Hatrick & Quests"
+                >
+                  +
+                </button>
               </div>
 
-              {/* Earn Points Button */}
+              {/* Gems Box */}
+              <div className="bg-[#0b1328] border border-[#23355d] hover:border-fuchsia-500/50 px-3 sm:px-3.5 py-1.5 rounded-2xl shadow-inner flex items-center gap-2.5 transition">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-700 via-fuchsia-600 to-pink-500 text-white flex items-center justify-center text-sm font-black shadow-[0_0_12px_rgba(217,70,239,0.5)] border border-fuchsia-300 shrink-0">
+                  💎
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="text-[9px] uppercase tracking-wider text-fuchsia-400/90 font-black leading-none">
+                    GEMS
+                  </span>
+                  <span className="text-sm sm:text-base font-black text-fuchsia-300 leading-none mt-0.5 font-mono">
+                    {gems.toLocaleString()}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenExchange) {
+                      onClose();
+                      onOpenExchange();
+                    } else {
+                      addGems(50, '96 FX Hub bonus');
+                    }
+                  }}
+                  className="w-5 h-5 rounded-md bg-fuchsia-500/20 hover:bg-fuchsia-500/40 border border-fuchsia-400/50 text-fuchsia-300 flex items-center justify-center text-xs font-black transition active:scale-95 ml-0.5 cursor-pointer"
+                  title="Currency Exchange & Gems"
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Earn Rewards Button */}
               <button
                 onClick={() => setIsEarnModalOpen(true)}
-                className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#d97706] via-[#f59e0b] to-[#b45309] hover:brightness-110 text-slate-950 font-black text-xs shadow-[0_0_20px_rgba(245,158,11,0.4)] transition transform active:scale-95 flex items-center gap-2 border border-amber-300/40"
+                className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-[#d97706] via-[#f59e0b] to-[#b45309] hover:brightness-110 text-slate-950 font-black text-xs shadow-[0_0_20px_rgba(245,158,11,0.4)] transition transform active:scale-95 flex items-center gap-2 border border-amber-300/40"
               >
                 <Gift className="w-4 h-4 text-slate-950" />
                 <div className="text-left">
-                  <div className="leading-none text-xs font-black">EARN POINTS</div>
-                  <div className="text-[9px] opacity-85 font-bold leading-none mt-0.5">Wheel / Hatrick</div>
+                  <div className="leading-none text-xs font-black">EARN REWARDS</div>
+                  <div className="text-[9px] opacity-85 font-bold leading-none mt-0.5">Wheel / Quests</div>
                 </div>
               </button>
             </div>
@@ -696,19 +778,26 @@ export function AnimationEffectsMasterHubModal({
                                 )}
                               </button>
                             ) : (
-                              <button
-                                onClick={() => handleBuy(item)}
-                                className={`w-full py-1.5 rounded-xl text-slate-950 font-black text-[10px] transition active:scale-95 shadow-md flex items-center justify-center gap-1 border ${
-                                  item.isCryState
-                                    ? 'bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 border-amber-200'
-                                    : 'bg-gradient-to-r from-amber-500 to-yellow-500 border-amber-300/40'
-                                }`}
-                              >
-                                <div className="w-3.5 h-3.5 rounded-full bg-slate-950 text-amber-400 flex items-center justify-center text-[9px] font-black">
-                                  $
-                                </div>
-                                <span>{item.price.toLocaleString()} PTS</span>
-                              </button>
+                              <div className="grid grid-cols-2 gap-1 w-full">
+                                <button
+                                  type="button"
+                                  onClick={() => handleBuy(item, 'coins')}
+                                  className="py-1.5 px-1 rounded-xl text-slate-950 font-black text-[10px] transition active:scale-95 shadow-md flex items-center justify-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 border border-amber-300/50"
+                                  title={`Unlock with ${item.price.toLocaleString()} Coins`}
+                                >
+                                  <span>🪙</span>
+                                  <span className="truncate">{item.price >= 1000 ? `${item.price / 1000}k` : item.price}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleBuy(item, 'gems')}
+                                  className="py-1.5 px-1 rounded-xl text-white font-black text-[10px] transition active:scale-95 shadow-md flex items-center justify-center gap-1 bg-gradient-to-r from-purple-700 via-fuchsia-600 to-pink-500 hover:brightness-110 border border-fuchsia-300/50"
+                                  title={`Unlock with ${Math.max(5, Math.round(item.price / 100))} Gems`}
+                                >
+                                  <span>💎</span>
+                                  <span className="truncate">{Math.max(5, Math.round(item.price / 100))}</span>
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1108,17 +1197,30 @@ export function AnimationEffectsMasterHubModal({
                               )}
                             </button>
                           ) : (
-                            <button
-                              onClick={() => {
-                                if (matchingCatalog) handleBuy(matchingCatalog);
-                              }}
-                              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:brightness-110 text-slate-950 font-black text-xs transition active:scale-95 shadow-[0_0_20px_rgba(245,158,11,0.4)] flex items-center justify-center gap-1.5 border border-amber-200"
-                            >
-                              <div className="w-4 h-4 rounded-full bg-slate-950 text-amber-400 flex items-center justify-center text-[10px] font-black">
-                                $
-                              </div>
-                              <span>UNLOCK CRY STATE ({spec.pointsValue.toLocaleString()} PTS)</span>
-                            </button>
+                            <div className="grid grid-cols-2 gap-2 w-full">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (matchingCatalog) handleBuy(matchingCatalog, 'coins');
+                                }}
+                                className="py-2.5 px-2 rounded-xl bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:brightness-110 text-slate-950 font-black text-xs transition active:scale-95 shadow-[0_0_15px_rgba(245,158,11,0.4)] flex items-center justify-center gap-1.5 border border-amber-200"
+                                title={`Unlock Cry State with ${spec.pointsValue.toLocaleString()} Coins`}
+                              >
+                                <span className="text-sm">🪙</span>
+                                <span>{spec.pointsValue.toLocaleString()} PTS</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (matchingCatalog) handleBuy(matchingCatalog, 'gems');
+                                }}
+                                className="py-2.5 px-2 rounded-xl bg-gradient-to-r from-purple-700 via-fuchsia-600 to-pink-600 hover:brightness-110 text-white font-black text-xs transition active:scale-95 shadow-[0_0_15px_rgba(217,70,239,0.4)] flex items-center justify-center gap-1.5 border border-fuchsia-300"
+                                title={`Unlock Cry State with ${Math.round(spec.pointsValue / 100)} Gems`}
+                              >
+                                <span className="text-sm">💎</span>
+                                <span>{Math.round(spec.pointsValue / 100)} GEMS</span>
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>

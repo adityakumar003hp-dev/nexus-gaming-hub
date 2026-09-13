@@ -367,7 +367,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               onClick={() => onOpenPrivacyTerms?.('privacy')}
               className="text-amber-300 hover:underline font-bold"
             >
-              Privacy Policy &amp; Terms (May 2026)
+              Privacy Policy &amp; Terms (September 2026)
             </button>
           </div>
         </div>

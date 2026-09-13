@@ -21,6 +21,7 @@ import {
   updateUserStatsInDb,
 } from './src/db/users.ts';
 import { adminAuth, adminDb, FieldValue } from './src/lib/firebase-admin.ts';
+import { moderateChatMessage } from './src/utils/chatModerator.ts';
 
 const app = express();
 const server = http.createServer(app);
@@ -5296,10 +5297,25 @@ io.on('connection', (socket: Socket) => {
       });
     }
 
+    // Auto-moderation check: strict location prohibition & PII masking
+    const modResult = moderateChatMessage(data.text);
+    if (modResult.hasLocationViolation) {
+      return socket.emit('chat:message', {
+        id: `sys_${Date.now()}`,
+        sender: '🛡️ SECURITY BOT',
+        text: '🚫 Message blocked: Location sharing is strictly prohibited on Chess.pro for player security.',
+        timestamp: Date.now(),
+        isSystem: true,
+      });
+    }
+
+    const cleanText = modResult.cleanText;
+    if (!cleanText.trim()) return;
+
     const msg: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       sender: currentUser.username,
-      text: data.text.trim(),
+      text: cleanText.trim(),
       timestamp: Date.now(),
     };
 
@@ -5326,9 +5342,25 @@ io.on('connection', (socket: Socket) => {
     const senderName = data.sender || currentUser.username;
     const isOwner = senderName.toLowerCase().includes('aditya') || currentUser.email === 'mukkuc41@gmail.com';
 
+    // Auto-moderation check: strict location prohibition & PII masking
+    const modResult = moderateChatMessage(data.text);
+    if (modResult.hasLocationViolation) {
+      return socket.emit('global:message', {
+        id: `sys_${Date.now()}`,
+        sender: '🛡️ SECURITY BOT',
+        avatar: '🛡️',
+        text: '🚫 Message blocked: Location sharing is strictly prohibited on Chess.pro for player security.',
+        timestamp: Date.now(),
+        isOwner: false,
+        tag: 'SECURITY SYSTEM',
+      });
+    }
+
+    const piiCleanText = modResult.cleanText;
+
     // Auto-moderation check: replace banned words
     const bannedWords = ['cheat', 'hack', 'botter', 'scam', 'badword1', 'badword2', 'spamlink'];
-    let sanitizedText = data.text.trim();
+    let sanitizedText = piiCleanText.trim();
     bannedWords.forEach((word) => {
       const reg = new RegExp(`\\b${word}\\b`, 'gi');
       sanitizedText = sanitizedText.replace(reg, '****');

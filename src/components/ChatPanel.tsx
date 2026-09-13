@@ -7,6 +7,7 @@ import { VoiceReportModal } from './VoiceReportModal';
 import { PlatformVoiceEngine } from '../utils/voiceEngine';
 import { isSiteOwner } from '../utils/owner';
 import { OwnerBadge } from './OwnerBadge';
+import { moderateChatMessage } from '../utils/chatModerator';
 
 interface ChatPanelProps {
   roomId: string | null;
@@ -89,6 +90,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   // Modal States
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [reportModalUser, setReportModalUser] = useState<string | null>(null);
+  const [moderationNotice, setModerationNotice] = useState<string | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -110,13 +112,33 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || disabled) return;
-    onSendMessage(inputText);
+    
+    // Check location prohibition & personal sensitive data masking
+    const modResult = moderateChatMessage(inputText);
+
+    if (modResult.hasLocationViolation) {
+      setModerationNotice('🚫 Location sharing is strictly prohibited on Chess.pro for your safety!');
+      setTimeout(() => setModerationNotice(null), 5000);
+      return;
+    }
+
+    if (modResult.isFlagged) {
+      setModerationNotice('🛡️ Personal info masked for your safety (phone number or email).');
+      setTimeout(() => setModerationNotice(null), 4000);
+    }
+    onSendMessage(modResult.cleanText);
     setInputText('');
   };
 
   const handleQuickPhrase = (phrase: string) => {
     if (disabled) return;
-    onSendMessage(phrase);
+    const modResult = moderateChatMessage(phrase);
+    if (modResult.hasLocationViolation) {
+      setModerationNotice('🚫 Location sharing is strictly prohibited on Chess.pro for your safety!');
+      setTimeout(() => setModerationNotice(null), 5000);
+      return;
+    }
+    onSendMessage(modResult.cleanText);
   };
 
   const toggleVoice = () => {
@@ -377,6 +399,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           </button>
         ))}
       </div>
+
+      {/* Moderation Safety Alert Banner */}
+      {moderationNotice && (
+        <div className="px-3 py-1.5 bg-amber-500/20 border-t border-b border-amber-500/40 text-[11px] font-semibold text-amber-300 flex items-center gap-1.5 animate-fadeIn">
+          <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>{moderationNotice}</span>
+        </div>
+      )}
 
       {/* Message Input */}
       {allowChat === false ? (

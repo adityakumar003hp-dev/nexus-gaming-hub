@@ -33,6 +33,7 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { soundFx } from '../utils/audio';
+import { moderateChatMessage } from '../utils/chatModerator';
 import { GameMode } from '../types';
 import { BUSINESS_COLORS, BusinessColorKey, BusinessColorConfig } from '../data/businessConfig';
 import {
@@ -1442,10 +1443,18 @@ export const BusinessBoard: React.FC<BusinessBoardProps> = ({
     ]);
   };
 
+  const [chatWarning, setChatWarning] = useState<string | null>(null);
+
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    addChatMessage(players[0].name, players[0].color, chatInput);
+    const modResult = moderateChatMessage(chatInput);
+    if (modResult.hasLocationViolation) {
+      setChatWarning('🚫 Location sharing is strictly prohibited on Chess.pro for your safety!');
+      setTimeout(() => setChatWarning(null), 4000);
+      return;
+    }
+    addChatMessage(players[0].name, players[0].color, modResult.cleanText);
     setChatInput('');
   };
 
@@ -2252,6 +2261,11 @@ export const BusinessBoard: React.FC<BusinessBoardProps> = ({
               </div>
 
               {/* Chat Input */}
+              {chatWarning && (
+                <div className="mt-1 p-1.5 rounded-lg bg-red-500/20 border border-red-500/40 text-[10px] text-red-300 text-center font-bold">
+                  {chatWarning}
+                </div>
+              )}
               <form onSubmit={handleSendChat} className="mt-2 flex items-center gap-1.5">
                 <input
                   type="text"

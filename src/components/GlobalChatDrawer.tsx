@@ -17,6 +17,7 @@ import {
 import { socketService } from '../utils/socket';
 import { soundFx } from '../utils/audio';
 import { isSiteOwner } from '../utils/owner';
+import { moderateChatMessage } from '../utils/chatModerator';
 
 export interface GlobalChatMessage {
   id: string;
@@ -286,13 +287,30 @@ export const GlobalChatDrawer: React.FC<GlobalChatDrawerProps> = ({
       return;
     }
 
-    // 4. Auto-Moderation Sanitize
+    // 4. Auto-Moderation & Strict Location Prohibition + Sensitive Data Masking
+    const piiResult = moderateChatMessage(rawText);
+
+    // PROHIBIT: If message contains physical location, GPS coordinates, or address, block transmission
+    if (piiResult.hasLocationViolation) {
+      setModerationWarning('🚫 Location sharing is strictly prohibited on Chess.pro for your safety!');
+      setTimeout(() => setModerationWarning(null), 5000);
+      if (soundEnabled) {
+        soundFx.playLowTime();
+      }
+      return;
+    }
+
+    const textAfterPii = piiResult.cleanText;
+
     const filterEnabled = localStorage.getItem('admin_chat_profanity_filter') !== 'disabled';
     const { cleanText, filteredCount } = filterEnabled
-      ? sanitizeMessage(rawText)
-      : { cleanText: rawText, filteredCount: 0 };
+      ? sanitizeMessage(textAfterPii)
+      : { cleanText: textAfterPii, filteredCount: 0 };
 
-    if (filteredCount > 0) {
+    if (piiResult.isFlagged) {
+      setModerationWarning('🛡️ Sensitive info protected: Phone number or email was masked.');
+      setTimeout(() => setModerationWarning(null), 4000);
+    } else if (filteredCount > 0) {
       setModerationWarning('🛡️ Auto-moderation active: filtered flagged words.');
       setTimeout(() => setModerationWarning(null), 4000);
     }

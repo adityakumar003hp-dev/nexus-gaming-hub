@@ -66,6 +66,7 @@ import { CoinHistoryModal } from './components/CoinHistoryModal';
 import { CurrencyExchangeModal } from './components/CurrencyExchangeModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { EmergencyLockdownOverlay } from './components/EmergencyLockdownOverlay';
+import { moderateChatMessage } from './utils/chatModerator';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, auth, subscribeToActiveGame, type ActiveGamePlatformState } from './lib/firebase';
 import { initDelegatedGameSelector, setActiveGame, resolveGameMetadata } from './lib/gameDispatcher';
@@ -449,6 +450,23 @@ export default function App() {
       });
     };
 
+    const handleGemsUpdated = (e: any) => {
+      const gems = e.detail?.gems ?? getUserGems();
+      setCurrentUser((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          gamerGems: gems,
+          stats: prev.stats
+            ? {
+                ...prev.stats,
+                gems,
+              }
+            : undefined,
+        };
+      });
+    };
+
     const handleStreakUpdated = (e: any) => {
       const updatedStreak = e.detail?.streak ?? getDailyStreakCount();
       setCurrentUser((prev) => {
@@ -467,6 +485,7 @@ export default function App() {
     };
 
     window.addEventListener('chess_points_updated', handlePointsUpdated);
+    window.addEventListener('chess_gems_updated', handleGemsUpdated);
     window.addEventListener('chess_streak_updated', handleStreakUpdated);
 
     (window as any).openMatchmakingModal = () => setIsMatchmakingOpen(true);
@@ -476,6 +495,7 @@ export default function App() {
       window.removeEventListener('token_compromised_alert', handleCompromiseAlert);
       window.removeEventListener('chess_hatrick_achieved', handleHatrickAchieved);
       window.removeEventListener('chess_points_updated', handlePointsUpdated);
+      window.removeEventListener('chess_gems_updated', handleGemsUpdated);
       window.removeEventListener('chess_streak_updated', handleStreakUpdated);
     };
   }, []);
@@ -1430,14 +1450,22 @@ export default function App() {
 
   // Send Chat Message
   const handleSendMessage = (text: string) => {
+    const modResult = moderateChatMessage(text);
+    if (modResult.hasLocationViolation) {
+      soundFx.playLowTime();
+      return;
+    }
+    const cleanText = modResult.cleanText;
+    if (!cleanText.trim()) return;
+
     if (gameMode === 'pvp' && activeRoomId) {
       const socket = socketService.getSocket();
-      socket?.emit('chat:send', { roomId: activeRoomId, text });
+      socket?.emit('chat:send', { roomId: activeRoomId, text: cleanText });
     } else {
       const msg: ChatMessage = {
         id: `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         sender: currentUser?.username || 'Guest',
-        text,
+        text: cleanText,
         timestamp: Date.now(),
       };
       setChatMessages((prev) => [...prev, msg]);
@@ -2160,6 +2188,7 @@ export default function App() {
             <div className="w-full animate-fadeIn">
               <CarromBoard
                 gameMode={gameMode}
+                onOpenExchange={() => setIsExchangeModalOpen(true)}
                 onGameEnd={(w, reason) => handleBoardGameEnd('carrom', w, reason)}
               />
             </div>
@@ -2807,6 +2836,11 @@ export default function App() {
         onOpenQuests={() => {
           setIsMasterHubOpen(false);
           setIsQuestsOpen(true);
+        }}
+        onOpenExchange={() => {
+          setIsMasterHubOpen(false);
+          setExchangeDirection('gemToCoin');
+          setIsExchangeModalOpen(true);
         }}
       />
 

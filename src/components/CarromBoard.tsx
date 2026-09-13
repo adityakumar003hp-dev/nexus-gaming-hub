@@ -13,12 +13,24 @@ import {
   Code,
   Music,
   Sliders,
+  ShoppingBag,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { soundFx } from '../utils/audio';
 import { carromAudio, CarromSoundTheme, CarromSoundSettings } from '../utils/carromAudio';
 import { CarromSoundSettingsModal } from './CarromSoundSettingsModal';
 import { BotAISettingsBar } from './BotAISettingsBar';
+import { CarromShopModal } from './CarromShopModal';
+import { getUserPoints, getUserGems } from '../utils/pointsManager';
+import {
+  CARROM_SHOP_DATA,
+  CarromEquippedLoadout,
+  getCarromLoadout,
+  CarromStrikerItem,
+  CarromPuckItem,
+  CarromTrailItem,
+  CarromPocketItem,
+} from '../data/carromMasterInventory';
 
 export type CarromGameMode = 'classic' | 'points' | 'freestyle';
 export type CarromOpponent = 'ai' | 'local' | 'solo';
@@ -64,11 +76,13 @@ interface StrikerState {
 interface CarromBoardProps {
   gameMode?: 'pvp' | 'ai' | 'local';
   onGameEnd?: (winner: 'w' | 'b' | 'draw', reason?: string) => void;
+  onOpenExchange?: () => void;
 }
 
 export const CarromBoard: React.FC<CarromBoardProps> = ({
   gameMode: externalGameMode = 'local',
   onGameEnd,
+  onOpenExchange,
 }) => {
   // Game Setup
   const [carromFormat, setCarromFormat] = useState<CarromGameMode>('classic');
@@ -84,6 +98,34 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
   const [vfxEnabled, setVfxEnabled] = useState<boolean>(true);
   const [quickPowerSelected, setQuickPowerSelected] = useState<number>(85);
   const [strikerPercent, setStrikerPercent] = useState<number>(85);
+
+  // Shop & Equipment State
+  const [showShopModal, setShowShopModal] = useState<boolean>(false);
+  const [loadout, setLoadout] = useState<CarromEquippedLoadout>(() => getCarromLoadout());
+  const loadoutRef = useRef<CarromEquippedLoadout>(loadout);
+  const [userCoins, setUserCoins] = useState<number>(() => getUserPoints());
+  const [userGems, setUserGems] = useState<number>(() => getUserGems());
+
+  useEffect(() => {
+    loadoutRef.current = loadout;
+  }, [loadout]);
+
+  useEffect(() => {
+    const handlePointsUpdated = (e: any) => {
+      setUserCoins(e.detail?.points ?? getUserPoints());
+    };
+    const handleGemsUpdated = (e: any) => {
+      setUserGems(e.detail?.gems ?? getUserGems());
+    };
+
+    window.addEventListener('chess_points_updated', handlePointsUpdated);
+    window.addEventListener('chess_gems_updated', handleGemsUpdated);
+
+    return () => {
+      window.removeEventListener('chess_points_updated', handlePointsUpdated);
+      window.removeEventListener('chess_gems_updated', handleGemsUpdated);
+    };
+  }, []);
 
   // Match State
   const [player1Score, setPlayer1Score] = useState<number>(0);
@@ -797,7 +839,11 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
     if (!strikerRef.current.active || isSimulatingRef.current || matchWinner) return;
 
     const clampedPower = Math.max(15, Math.min(100, power));
-    const speed = (clampedPower / 100) * 16;
+    const activeStriker =
+      CARROM_SHOP_DATA.strikers.find((s) => s.id === loadoutRef.current.striker) ||
+      CARROM_SHOP_DATA.strikers[0];
+    const forceMultiplier = 1 + ((activeStriker.stats?.force ?? 5) - 5) * 0.025;
+    const speed = (clampedPower / 100) * 16 * forceMultiplier;
 
     strikerRef.current.vx = Math.cos(angle) * speed;
     strikerRef.current.vy = Math.sin(angle) * speed;
@@ -808,7 +854,7 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
 
     setIsGameRunning(true);
     playCarromSound('strike', clampedPower);
-    setMatchStatusText(`Shot Released with ${Math.round(clampedPower)}% Power!`);
+    setMatchStatusText(`Shot Released with ${Math.round(clampedPower)}% Power (${activeStriker.name})!`);
   };
 
   // AI Opponent Shot Generation (System Prompt Compliant)
@@ -1303,18 +1349,38 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
       drawBaseline(BASELINE_Y_P1);
       drawBaseline(BASELINE_Y_P2);
 
+      // Active Equipped Loadout Styles from Shop
+      const activeStriker =
+        CARROM_SHOP_DATA.strikers.find((s) => s.id === loadoutRef.current.striker) ||
+        CARROM_SHOP_DATA.strikers[0];
+      const activePuck =
+        CARROM_SHOP_DATA.pucks.find((p) => p.id === loadoutRef.current.puck) ||
+        CARROM_SHOP_DATA.pucks[0];
+      const activeTrail =
+        CARROM_SHOP_DATA.trails.find((t) => t.id === loadoutRef.current.trail) ||
+        CARROM_SHOP_DATA.trails[0];
+      const activePocket =
+        CARROM_SHOP_DATA.pockets.find((p) => p.id === loadoutRef.current.pocket) ||
+        CARROM_SHOP_DATA.pockets[0];
+
       // 4 Corner Pockets
       POCKETS.forEach((pocket) => {
+        ctx.save();
+        if (activePocket.glowColor) {
+          ctx.shadowColor = activePocket.glowColor;
+          ctx.shadowBlur = 12;
+        }
         ctx.fillStyle = '#090b10';
         ctx.beginPath();
         ctx.arc(pocket.x, pocket.y, POCKET_RADIUS, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = '#ca8a04';
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = activePocket.ringColor || '#ca8a04';
+        ctx.lineWidth = 2.8;
         ctx.beginPath();
         ctx.arc(pocket.x, pocket.y, POCKET_RADIUS, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.restore();
       });
 
       // Draw Active Carrom Pieces
@@ -1327,17 +1393,32 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
         ctx.shadowOffsetX = 1.5;
         ctx.shadowOffsetY = 1.5;
 
-        ctx.fillStyle = p.color;
+        let fillCol = p.color;
+        let strokeCol = p.type === 'white' ? '#d97706' : p.type === 'queen' ? '#fde047' : '#0f172a';
+        let innerStroke = strokeCol;
+
+        if (p.type === 'white' && activePuck.whiteColor) {
+          fillCol = activePuck.whiteColor;
+          strokeCol = activePuck.rimColor || '#d97706';
+          innerStroke = activePuck.rimColor || '#d97706';
+        } else if (p.type === 'black' && activePuck.blackColor) {
+          fillCol = activePuck.blackColor;
+          strokeCol = activePuck.rimColor || '#475569';
+          innerStroke = activePuck.rimColor || '#475569';
+        }
+
+        ctx.fillStyle = fillCol;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = p.type === 'white' ? '#d97706' : p.type === 'queen' ? '#fde047' : '#0f172a';
+        ctx.strokeStyle = strokeCol;
         ctx.lineWidth = 1.8;
         ctx.stroke();
 
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius * 0.45, 0, Math.PI * 2);
+        ctx.strokeStyle = innerStroke;
         ctx.stroke();
 
         ctx.restore();
@@ -1368,25 +1449,25 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
       // Draw Striker
       if (striker.active || !isSimulatingRef.current) {
         ctx.save();
-        if (vfxEnabled) {
-          ctx.shadowColor = 'rgba(59, 130, 246, 0.6)';
-          ctx.shadowBlur = 10;
+        if (vfxEnabled || activeStriker.glowColor) {
+          ctx.shadowColor = activeStriker.glowColor || 'rgba(59, 130, 246, 0.6)';
+          ctx.shadowBlur = activeStriker.glowColor ? 14 : 10;
         }
 
         // Striker Base
-        ctx.fillStyle = '#e0e7ff';
+        ctx.fillStyle = activeStriker.color || '#e0e7ff';
         ctx.beginPath();
         ctx.arc(striker.x, striker.y, striker.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = '#1e3a8a';
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = activeStriker.rimColor || '#1e3a8a';
+        ctx.lineWidth = 2.8;
         ctx.stroke();
 
         // Authentic double-ring aesthetic
         ctx.beginPath();
         ctx.arc(striker.x, striker.y, striker.radius * 0.55, 0, Math.PI * 2);
-        ctx.strokeStyle = '#3b82f6';
+        ctx.strokeStyle = activeStriker.innerColor || '#3b82f6';
         ctx.lineWidth = 2;
         ctx.stroke();
 
@@ -1465,13 +1546,26 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
 
           ctx.save();
 
-          // Dynamic Trajectory Dotted Line (carrom_game.js specification)
+          // Dynamic Trajectory Dotted Line (with equipped Trail effect)
+          const trailColor =
+            activeTrail.id !== 'trl_none' && activeTrail.color
+              ? activeTrail.color
+              : hasHitPiece
+              ? 'rgba(46, 204, 113, 0.9)'
+              : 'rgba(231, 76, 60, 0.85)';
+          const trailDash = activeTrail.dashPattern || [8, 6];
+
+          if (activeTrail.glowColor) {
+            ctx.shadowColor = activeTrail.glowColor;
+            ctx.shadowBlur = 12;
+          }
+
           ctx.beginPath();
-          ctx.setLineDash([8, 6]);
+          ctx.setLineDash(trailDash);
           ctx.moveTo(striker.x, striker.y);
           ctx.lineTo(aimX, aimY);
-          ctx.strokeStyle = hasHitPiece ? 'rgba(46, 204, 113, 0.9)' : 'rgba(231, 76, 60, 0.85)';
-          ctx.lineWidth = 4;
+          ctx.strokeStyle = trailColor;
+          ctx.lineWidth = activeTrail.glowColor ? 4.5 : 4;
           ctx.stroke();
 
           // Target Circle Ring (Predictive Impact Contact Location)
@@ -1741,6 +1835,35 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Live Wallet Balances */}
+            <button
+              type="button"
+              onClick={() => setShowShopModal(true)}
+              className="flex items-center gap-1 sm:gap-1.5 bg-[#0b1328] hover:bg-[#121f3f] border border-amber-500/40 hover:border-amber-400 px-2 sm:px-2.5 h-[34px] rounded-[8px] text-amber-300 text-xs font-bold transition shadow-sm cursor-pointer"
+              title="Your Coins • Click to open Carrom Shop"
+            >
+              <span>🪙</span>
+              <span className="font-mono">{userCoins.toLocaleString()}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowShopModal(true)}
+              className="flex items-center gap-1 sm:gap-1.5 bg-[#0b1328] hover:bg-[#121f3f] border border-fuchsia-500/40 hover:border-fuchsia-400 px-2 sm:px-2.5 h-[34px] rounded-[8px] text-fuchsia-300 text-xs font-bold transition shadow-sm cursor-pointer"
+              title="Your Gems • Click to open Carrom Shop"
+            >
+              <span>💎</span>
+              <span className="font-mono">{userGems.toLocaleString()}</span>
+            </button>
+
+            <button
+              onClick={() => setShowShopModal(true)}
+              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black px-2.5 sm:px-3 h-[34px] rounded-[8px] flex items-center gap-1.5 cursor-pointer transition text-xs font-black shadow-[0_0_14px_rgba(245,158,11,0.35)] uppercase tracking-wider active:scale-95"
+              title="Carrom Master Shop - Equip Strikers, Powers, Pucks, Aim Trails & Pockets"
+            >
+              <ShoppingBag className="w-4 h-4 text-black stroke-[2.5]" />
+              <span className="hidden sm:inline">Shop</span>
+            </button>
             <button
               onClick={() => {
                 const next = !soundActive;
@@ -2038,6 +2161,17 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
         </div>
       </div>
 
+      {/* Carrom Item Shop Modal */}
+      <CarromShopModal
+        isOpen={showShopModal}
+        onClose={() => setShowShopModal(false)}
+        onOpenExchange={onOpenExchange}
+        onEquipChange={(newLoadout) => {
+          setLoadout(newLoadout);
+          loadoutRef.current = newLoadout;
+        }}
+      />
+
       {/* Carrom Sound Settings & Replacer Modal */}
       <CarromSoundSettingsModal
         isOpen={showSoundModal}
@@ -2085,7 +2219,17 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
                 <li>• <strong>Striker Foul:</strong> -5 Points penalty and returns a pocketed piece to the center rosette.</li>
               </ul>
 
-              <div className="pt-2 border-t border-[#242f4c]">
+              <div className="pt-2 border-t border-[#242f4c] flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    setShowGuideModal(false);
+                    setShowShopModal(true);
+                  }}
+                  className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black py-2 px-3 rounded-[8px] font-bold text-xs flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shadow-md"
+                >
+                  <ShoppingBag className="w-4 h-4 stroke-[2.5]" />
+                  <span>Open Carrom Master Shop (Strikers &amp; Trails)</span>
+                </button>
                 <button
                   onClick={copyStandaloneCode}
                   className="w-full bg-[#1b2438] hover:bg-[#24304d] border border-[#3498db] text-[#3498db] hover:text-white py-2 px-3 rounded-[8px] font-semibold text-xs flex items-center justify-center gap-2 transition active:scale-95"

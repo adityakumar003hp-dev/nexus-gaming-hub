@@ -57,6 +57,7 @@ import {
   adminSetPlatformLockdown
 } from '../lib/universal_app_sync';
 import { setupAdminPanelEventListeners } from '../lib/admin_panel_controller';
+import { moderateChatMessage } from '../utils/chatModerator';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -151,6 +152,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
   const [isChatLocked, setIsChatLocked] = useState<boolean>(() => {
     return localStorage.getItem('admin_chat_locked') === 'true';
   });
+  const [testChatInput, setTestChatInput] = useState<string>("Hey, let's meet at Shyam Nagar call me on 9876543210");
 
   // Tournament Creation State
   const [tournName, setTournName] = useState<string>('');
@@ -1183,6 +1185,116 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   <p className="text-[10px] text-slate-500 leading-relaxed">
                     Filters scam links, bot spam, and toxicity automatically before sending to the global room.
                   </p>
+                </div>
+              </div>
+
+              {/* Real-Time Personal Data (PII) Auto-Moderator Tester */}
+              <div className="p-4 rounded-2xl bg-[#091122] border border-[#1e3056] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-300 font-mono">
+                      Real-Time Personal Data (PII) Auto-Moderator
+                    </span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono font-bold">
+                    ACTIVE PLATFORM-WIDE
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Automatically detects and masks sensitive personal information across in-game chat, global broadcast drawer, and game rooms.
+                </p>
+
+                {/* Rules Spec Badges */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[10px] font-mono">
+                  <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col gap-1">
+                    <span className="text-amber-400 font-bold flex items-center gap-1">
+                      <span>📱</span> Phone Numbers
+                    </span>
+                    <span className="text-slate-400 text-[9px]">10-digit mobile numbers &amp; codes</span>
+                    <span className="text-emerald-400 font-black">Masked → xxxxxxxxxx</span>
+                  </div>
+
+                  <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col gap-1">
+                    <span className="text-sky-400 font-bold flex items-center gap-1">
+                      <span>📍</span> Street Locations
+                    </span>
+                    <span className="text-slate-400 text-[9px]">Shyam Nagar, Vaishali, etc.</span>
+                    <span className="text-emerald-400 font-black">Masked → [address hidden]</span>
+                  </div>
+
+                  <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col gap-1">
+                    <span className="text-purple-400 font-bold flex items-center gap-1">
+                      <span>✉️</span> Email Addresses
+                    </span>
+                    <span className="text-slate-400 text-[9px]">Standard email formats</span>
+                    <span className="text-emerald-400 font-black">Masked → [email hidden]</span>
+                  </div>
+                </div>
+
+                {/* Live Interactive Test Simulator */}
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Live Moderation Simulator
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setTestChatInput("Hey, let's meet at Shyam Nagar call me on 9876543210")}
+                        className="text-[9px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        Sample 1 (Phone + Loc)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTestChatInput("Add me on yash@gmail.com")}
+                        className="text-[9px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        Sample 2 (Email)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTestChatInput("Nice match! Great game.")}
+                        className="text-[9px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        Sample 3 (Clean)
+                      </button>
+                    </div>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={testChatInput}
+                    onChange={(e) => setTestChatInput(e.target.value)}
+                    placeholder="Type a test message with phone, address, or email..."
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-sky-500"
+                  />
+
+                  {/* Simulator Output */}
+                  {(() => {
+                    const res = moderateChatMessage(testChatInput);
+                    return (
+                      <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-mono">
+                        <div className="flex-1 overflow-hidden">
+                          <span className="text-slate-500 text-[10px] uppercase block">Moderated Output:</span>
+                          <span className={res.isFlagged ? 'text-amber-300 font-bold' : 'text-emerald-300'}>
+                            {res.cleanText || '<Empty>'}
+                          </span>
+                        </div>
+                        <span
+                          className={`px-2 py-1 rounded text-[10px] font-bold shrink-0 ${
+                            res.isFlagged
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          }`}
+                        >
+                          {res.isFlagged ? '🛡️ VIOLATION MASKED' : '✅ CLEAN MESSAGE'}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
