@@ -423,6 +423,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onPaste={(e) => {
+                const pasted = e.clipboardData?.getData('text') || '';
+                if (pasted) {
+                  const check = moderateChatMessage(pasted);
+                  if (check.hasLocationViolation) {
+                    e.preventDefault();
+                    setModerationNotice('🚫 Pasted location detected and blocked for your safety!');
+                    setTimeout(() => setModerationNotice(null), 5000);
+                  }
+                }
+              }}
               placeholder={disabled ? 'Chat disabled' : isDictating ? 'Listening to voice...' : 'Type or dictate message...'}
               disabled={isChatActuallyDisabled}
               className={`w-full bg-white/5 border border-white/10 rounded-xl pl-3 pr-8 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-indigo-400 transition disabled:opacity-50 ${

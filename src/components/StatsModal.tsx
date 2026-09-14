@@ -25,6 +25,7 @@ interface StatsModalProps {
   onClose: () => void;
   onReplayMatch: (match: MatchRecord) => void;
   onOpenDailyStreak?: () => void;
+  onOpenCarromBadges?: () => void;
 }
 
 export const SIXTEEN_GAMES = [
@@ -65,6 +66,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
   onClose,
   onReplayMatch,
   onOpenDailyStreak,
+  onOpenCarromBadges,
 }) => {
   const [selectedGame, setSelectedGame] = useState<string>('all');
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -197,6 +199,35 @@ export const StatsModal: React.FC<StatsModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* 🏆 Carrom Badge System Entry Button */}
+              {onOpenCarromBadges && (
+                <div className="bg-gradient-to-r from-amber-950/40 via-slate-900 to-amber-950/30 border border-amber-500/40 rounded-2xl p-3.5 px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md shadow-amber-950/20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-xl shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                      🏆
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-black text-white">Carrom Badge System</h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40 font-mono">
+                          656 Badges
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        150 Core • 6 Top Rank • 500 Special Challenges • Archive Vault &amp; Showcase
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={onOpenCarromBadges}
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-xs transition active:scale-95 shadow-md flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                  >
+                    <span>View Badge Menu</span>
+                    <Sparkles className="w-3.5 h-3.5 text-black" />
+                  </button>
+                </div>
+              )}
 
               {/* 1. Primary Metrics Grid (8 Core Requirements) */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

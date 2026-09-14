@@ -2271,6 +2271,20 @@ export const BusinessBoard: React.FC<BusinessBoardProps> = ({
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
+                  onPaste={(e) => {
+                    const pasted = e.clipboardData?.getData('text') || '';
+                    if (pasted) {
+                      const check = moderateChatMessage(pasted);
+                      if (check.hasLocationViolation) {
+                        e.preventDefault();
+                        setChatWarning('🚫 Pasted location detected and blocked for your safety!');
+                        setTimeout(() => setChatWarning(null), 5000);
+                        if (soundEnabled) {
+                          soundFx.playError();
+                        }
+                      }
+                    }
+                  }}
                   placeholder="Type a message..."
                   className="flex-1 bg-[#0f172a] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 transition"
                 />

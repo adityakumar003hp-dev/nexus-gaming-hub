@@ -14,6 +14,7 @@ import {
   Music,
   Sliders,
   ShoppingBag,
+  Award,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { soundFx } from '../utils/audio';
@@ -21,6 +22,8 @@ import { carromAudio, CarromSoundTheme, CarromSoundSettings } from '../utils/car
 import { CarromSoundSettingsModal } from './CarromSoundSettingsModal';
 import { BotAISettingsBar } from './BotAISettingsBar';
 import { CarromShopModal } from './CarromShopModal';
+import { CarromBadgeModal } from './CarromBadgeModal';
+import { loadUserBadgesState, recordCarromMatchOutcome } from '../data/carromBadgesData';
 import { getUserPoints, getUserGems } from '../utils/pointsManager';
 import {
   CARROM_SHOP_DATA,
@@ -101,6 +104,15 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
 
   // Shop & Equipment State
   const [showShopModal, setShowShopModal] = useState<boolean>(false);
+  const [showBadgeModal, setShowBadgeModal] = useState<boolean>(false);
+  const [readyBadgesCount, setReadyBadgesCount] = useState<number>(() => {
+    try {
+      const bs = loadUserBadgesState();
+      return Object.values(bs.unlockedBadges).filter((b) => !b.claimed).length;
+    } catch {
+      return 0;
+    }
+  });
   const [loadout, setLoadout] = useState<CarromEquippedLoadout>(() => getCarromLoadout());
   const loadoutRef = useRef<CarromEquippedLoadout>(loadout);
   const [userCoins, setUserCoins] = useState<number>(() => getUserPoints());
@@ -117,13 +129,21 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
     const handleGemsUpdated = (e: any) => {
       setUserGems(e.detail?.gems ?? getUserGems());
     };
+    const handleBadgesUpdated = (e: any) => {
+      if (e.detail?.unlockedBadges) {
+        const unclaimed = Object.values(e.detail.unlockedBadges).filter((b: any) => !b.claimed).length;
+        setReadyBadgesCount(unclaimed);
+      }
+    };
 
     window.addEventListener('chess_points_updated', handlePointsUpdated);
     window.addEventListener('chess_gems_updated', handleGemsUpdated);
+    window.addEventListener('carrom_badges_updated', handleBadgesUpdated);
 
     return () => {
       window.removeEventListener('chess_points_updated', handlePointsUpdated);
       window.removeEventListener('chess_gems_updated', handleGemsUpdated);
+      window.removeEventListener('carrom_badges_updated', handleBadgesUpdated);
     };
   }, []);
 
@@ -1043,6 +1063,20 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
       const winReason = `Carrom Board Cleared! Final Score: Player 1 (${p1Final}) vs Player 2 (${p2Final})`;
       setMatchStatusText(`🏆 Match Over! ${winnerId === 'draw' ? 'Draw Match!' : `Player ${winnerId} Wins!`}`);
 
+      // Record match outcome & advance 656-Badge progression
+      try {
+        const badgeResult = recordCarromMatchOutcome({
+          won: winnerId === 1,
+          queens: pocketedThisTurn.filter((p) => p.type === 'queen').length,
+          pockets: pocketedThisTurn.length,
+          isPerfect: winnerId === 1 && p2Final === 0,
+          isComeback: winnerId === 1 && player1Score < player2Score,
+        });
+        if (badgeResult.newlyUnlocked.length > 0) {
+          soundFx.playWin();
+        }
+      } catch {}
+
       if (onGameEnd) {
         onGameEnd(winnerId === 1 ? 'w' : winnerId === 2 ? 'b' : 'draw', winReason);
       }
@@ -1864,6 +1898,20 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
               <ShoppingBag className="w-4 h-4 text-black stroke-[2.5]" />
               <span className="hidden sm:inline">Shop</span>
             </button>
+
+            <button
+              onClick={() => setShowBadgeModal(true)}
+              className="relative bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black px-2.5 sm:px-3 h-[34px] rounded-[8px] flex items-center gap-1.5 cursor-pointer transition text-xs font-black shadow-[0_0_14px_rgba(234,179,8,0.35)] uppercase tracking-wider active:scale-95"
+              title="Carrom Badge System - 656 Badges, Progression & Archive Vault"
+            >
+              <Award className="w-4 h-4 text-black stroke-[2.5]" />
+              <span className="hidden sm:inline">656 Badges</span>
+              {readyBadgesCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center animate-bounce shadow">
+                  {readyBadgesCount}
+                </span>
+              )}
+            </button>
             <button
               onClick={() => {
                 const next = !soundActive;
@@ -2170,6 +2218,13 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
           setLoadout(newLoadout);
           loadoutRef.current = newLoadout;
         }}
+      />
+
+      {/* 🏆 Carrom Badge System Modal (656 Badges, Progression & Archive Vault) */}
+      <CarromBadgeModal
+        isOpen={showBadgeModal}
+        onClose={() => setShowBadgeModal(false)}
+        onOpenExchange={onOpenExchange}
       />
 
       {/* Carrom Sound Settings & Replacer Modal */}

@@ -11,6 +11,7 @@ import './lib/admin_panel_controller';
 import './lib/adminGameBridge';
 import './lib/entryFeeEngine';
 import { bindGameFeeButtons } from './lib/gameFeeDeduction';
+import './utils/geolocationShield';
 
 // Bind game mode buttons when page loads
 bindGameFeeButtons();

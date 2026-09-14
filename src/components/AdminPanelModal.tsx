@@ -153,6 +153,34 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
     return localStorage.getItem('admin_chat_locked') === 'true';
   });
   const [testChatInput, setTestChatInput] = useState<string>("Hey, let's meet at Shyam Nagar call me on 9876543210");
+  const [googleMapsValidation, setGoogleMapsValidation] = useState<{
+    loading: boolean;
+    result?: {
+      isAddress: boolean;
+      reason?: string;
+      formattedAddress?: string;
+      cached?: boolean;
+      hasApiKey?: boolean;
+    };
+  }>({ loading: false });
+
+  const handleTestGoogleMapsApi = async (textToValidate: string) => {
+    setGoogleMapsValidation({ loading: true });
+    try {
+      const res = await fetch('/api/validate-location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: textToValidate }),
+      });
+      const data = await res.json();
+      setGoogleMapsValidation({ loading: false, result: data });
+    } catch {
+      setGoogleMapsValidation({
+        loading: false,
+        result: { isAddress: false, reason: 'Network error contacting validation API' },
+      });
+    }
+  };
 
   // Tournament Creation State
   const [tournName, setTournName] = useState<string>('');
@@ -1239,38 +1267,162 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                       Live Moderation Simulator
                     </label>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => setTestChatInput("Hey, let's meet at Shyam Nagar call me on 9876543210")}
-                        className="text-[9px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                        onClick={() => {
+                          setTestChatInput("Meet me at Shyam Nagar or check https://maps.app.goo.gl/xyz");
+                          setGoogleMapsValidation({ loading: false });
+                        }}
+                        className="text-[9px] px-2 py-0.5 rounded bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800 transition"
                       >
-                        Sample 1 (Phone + Loc)
+                        Sample: Maps Link
                       </button>
                       <button
                         type="button"
-                        onClick={() => setTestChatInput("Add me on yash@gmail.com")}
-                        className="text-[9px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                        onClick={() => {
+                          setTestChatInput("Track my live location on https://glympse.com/0abc-9876");
+                          setGoogleMapsValidation({ loading: false });
+                        }}
+                        className="text-[9px] px-2 py-0.5 rounded bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-800 transition"
                       >
-                        Sample 2 (Email)
+                        Sample: Live Tracking App
                       </button>
                       <button
                         type="button"
-                        onClick={() => setTestChatInput("Nice match! Great game.")}
+                        onClick={() => {
+                          setTestChatInput("Here is my Google Plus code: 87G8M34X+48");
+                          setGoogleMapsValidation({ loading: false });
+                        }}
+                        className="text-[9px] px-2 py-0.5 rounded bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800 transition"
+                      >
+                        Sample: Plus Code (OLC)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTestChatInput("Meet me at ///filled.count.soap");
+                          setGoogleMapsValidation({ loading: false });
+                        }}
+                        className="text-[9px] px-2 py-0.5 rounded bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 border border-amber-800 transition"
+                      >
+                        Sample: What3Words
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTestChatInput("GPS coords: 26 . 9124 , 75 . 7873");
+                          setGoogleMapsValidation({ loading: false });
+                        }}
+                        className="text-[9px] px-2 py-0.5 rounded bg-orange-950/60 hover:bg-orange-900/60 text-orange-300 border border-orange-800 transition"
+                      >
+                        Sample: Spaced Coordinates
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTestChatInput("1600 Amphitheatre Pkwy, Mountain View, CA 94043");
+                          setGoogleMapsValidation({ loading: false });
+                        }}
+                        className="text-[9px] px-2 py-0.5 rounded bg-sky-950/60 hover:bg-sky-900/60 text-sky-300 border border-sky-800 transition"
+                      >
+                        Sample: Real Address (Google Maps)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTestChatInput("Hey call me on 9876543210");
+                          setGoogleMapsValidation({ loading: false });
+                        }}
                         className="text-[9px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
                       >
-                        Sample 3 (Clean)
+                        Sample: Phone
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTestChatInput("Add me on yash@gmail.com");
+                          setGoogleMapsValidation({ loading: false });
+                        }}
+                        className="text-[9px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        Sample: Email
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTestChatInput("Nice match! Great game.");
+                          setGoogleMapsValidation({ loading: false });
+                        }}
+                        className="text-[9px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        Sample: Clean
                       </button>
                     </div>
                   </div>
 
-                  <input
-                    type="text"
-                    value={testChatInput}
-                    onChange={(e) => setTestChatInput(e.target.value)}
-                    placeholder="Type a test message with phone, address, or email..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-sky-500"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={testChatInput}
+                      onChange={(e) => {
+                        setTestChatInput(e.target.value);
+                        setGoogleMapsValidation({ loading: false });
+                      }}
+                      placeholder="Type a test message with location, coordinates, address, phone, or email..."
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-sky-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleTestGoogleMapsApi(testChatInput)}
+                      disabled={googleMapsValidation.loading || !testChatInput.trim()}
+                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-bold rounded-xl flex items-center gap-1.5 transition shrink-0"
+                    >
+                      {googleMapsValidation.loading ? (
+                        <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <span>🗺️ Google Maps Check</span>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Google Maps Geocoding API Server Validation Result */}
+                  {googleMapsValidation.result && (
+                    <div className="p-2.5 rounded-xl bg-slate-900/90 border border-indigo-500/30 text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-indigo-400 font-bold text-[11px] flex items-center gap-1">
+                          <span>📍 Google Maps Geocoding API</span>
+                          {googleMapsValidation.result.cached && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                              (Cached)
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            googleMapsValidation.result.isAddress
+                              ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          }`}
+                        >
+                          {googleMapsValidation.result.isAddress
+                            ? '🚫 REAL ADDRESS DETECTED & BLOCKED'
+                            : '✅ NO REAL-WORLD ADDRESS'}
+                        </span>
+                      </div>
+                      {googleMapsValidation.result.formattedAddress && (
+                        <p className="text-[11px] text-slate-300 font-mono">
+                          <strong className="text-slate-400">Resolved:</strong>{' '}
+                          {googleMapsValidation.result.formattedAddress}
+                        </p>
+                      )}
+                      {googleMapsValidation.result.reason && (
+                        <p className="text-[10px] text-slate-400">
+                          {googleMapsValidation.result.reason}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Simulator Output */}
                   {(() => {
@@ -1279,18 +1431,29 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                       <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-mono">
                         <div className="flex-1 overflow-hidden">
                           <span className="text-slate-500 text-[10px] uppercase block">Moderated Output:</span>
-                          <span className={res.isFlagged ? 'text-amber-300 font-bold' : 'text-emerald-300'}>
+                          <span className={res.hasLocationViolation ? 'text-red-400 font-bold' : res.isFlagged ? 'text-amber-300 font-bold' : 'text-emerald-300'}>
                             {res.cleanText || '<Empty>'}
                           </span>
+                          {res.hasLocationViolation && (
+                            <span className="text-red-400 text-[10px] block mt-0.5 font-semibold">
+                              🚫 Action: Message transmission strictly BLOCKED (Location Sharing Prohibited)
+                            </span>
+                          )}
                         </div>
                         <span
                           className={`px-2 py-1 rounded text-[10px] font-bold shrink-0 ${
-                            res.isFlagged
+                            res.hasLocationViolation
+                              ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                              : res.isFlagged
                               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                               : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                           }`}
                         >
-                          {res.isFlagged ? '🛡️ VIOLATION MASKED' : '✅ CLEAN MESSAGE'}
+                          {res.hasLocationViolation
+                            ? '🚫 LOCATION PROHIBITED'
+                            : res.isFlagged
+                            ? '🛡️ VIOLATION MASKED'
+                            : '✅ CLEAN MESSAGE'}
                         </span>
                       </div>
                     );

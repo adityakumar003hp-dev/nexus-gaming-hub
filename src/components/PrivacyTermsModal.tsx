@@ -184,15 +184,15 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                   <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-xs space-y-1">
-                    <span className="text-amber-400 font-bold block">📱 Phone Number Masking</span>
+                    <span className="text-red-400 font-bold block">🚫 Location Sharing Prohibition</span>
                     <p className="text-slate-400 text-[11px]">
-                      10-digit mobile numbers and formatted phone strings are intercepted and replaced with <code className="text-amber-300 font-mono">xxxxxxxxxx</code>.
+                      Sharing physical locations, GPS coordinates, map links, and addresses is strictly blocked with <code className="text-red-300 font-mono">[location prohibited]</code>.
                     </p>
                   </div>
                   <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-xs space-y-1">
-                    <span className="text-sky-400 font-bold block">📍 Street &amp; Address Privacy</span>
+                    <span className="text-amber-400 font-bold block">📱 Phone Number Masking</span>
                     <p className="text-slate-400 text-[11px]">
-                      Identified street names, residential localities, and physical address keywords are converted to <code className="text-sky-300 font-mono">[address hidden]</code>.
+                      10-digit mobile numbers and formatted phone strings are intercepted and replaced with <code className="text-amber-300 font-mono">xxxxxxxxxx</code>.
                     </p>
                   </div>
                   <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-xs space-y-1">
@@ -284,9 +284,15 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
                 </p>
                 <div className="space-y-2 text-xs">
                   <div className="p-3 bg-red-500/10 border border-red-400/20 rounded-xl space-y-1">
-                    <strong className="text-red-300 block">🚫 Personal Sensitive Data (PII) Strict Prohibition:</strong>
+                    <strong className="text-red-300 block">🚫 Location Sharing Absolute Prohibition:</strong>
                     <span className="text-slate-300">
-                      Users must not broadcast, request, or share sensitive personal identifiers—including phone numbers, personal email addresses, home street addresses, financial details, or government IDs. Our automated moderation engine replaces phone numbers with <code className="text-amber-300 font-mono">xxxxxxxxxx</code>, addresses with <code className="text-sky-300 font-mono">[address hidden]</code>, and emails with <code className="text-purple-300 font-mono">[email hidden]</code>. Intentionally attempting to evade or circumvent filtering (e.g. spelling numbers out, spacing tricks, obfuscation) is a direct terms violation.
+                      Users are strictly prohibited from broadcasting, requesting, or sharing their physical location, residential addresses, GPS coordinates, or live map links (Google Maps, Apple Maps, Waze, etc.) across any chat channel. The platform automatically blocks location messages client- and server-side.
+                    </span>
+                  </div>
+                  <div className="p-3 bg-red-500/10 border border-red-400/20 rounded-xl space-y-1">
+                    <strong className="text-red-300 block">🚫 Personal Sensitive Data (PII) Masking:</strong>
+                    <span className="text-slate-300">
+                      Users must not broadcast sensitive personal identifiers—including phone numbers, personal email addresses, financial details, or government IDs. Our automated moderation engine masks phone numbers with <code className="text-amber-300 font-mono">xxxxxxxxxx</code>, locations with <code className="text-red-300 font-mono">[location prohibited]</code>, and emails with <code className="text-purple-300 font-mono">[email hidden]</code>. Intentionally attempting to evade or circumvent filtering (e.g. spelling numbers out, spacing tricks, obfuscation) is a direct terms violation.
                     </span>
                   </div>
                   <div className="p-3 bg-red-500/10 border border-red-400/20 rounded-xl space-y-1">
@@ -487,7 +493,7 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
                 <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
                   <h4 className="text-xs font-bold text-indigo-300">Key Security &amp; Privacy Specifications:</h4>
                   <ul className="space-y-1.5 text-[11px] text-gray-300 list-disc list-inside">
-                    <li><strong className="text-white">Real-Time PII Shield:</strong> Automated client &amp; server regex filters masking phone numbers (<code className="text-amber-300 font-mono text-[10px]">xxxxxxxxxx</code>), street addresses (<code className="text-sky-300 font-mono text-[10px]">[address hidden]</code>), and emails (<code className="text-purple-300 font-mono text-[10px]">[email hidden]</code>).</li>
+                    <li><strong className="text-white">Real-Time PII &amp; Location Shield:</strong> Automated client &amp; server filters strictly blocking prohibited location sharing (<code className="text-red-300 font-mono text-[10px]">[location prohibited]</code>), while masking phone numbers (<code className="text-amber-300 font-mono text-[10px]">xxxxxxxxxx</code>) and emails (<code className="text-purple-300 font-mono text-[10px]">[email hidden]</code>).</li>
                     <li><strong className="text-white">Collision-Free UUID v4:</strong> Unbounded, guaranteed unique guest sessions.</li>
                     <li><strong className="text-white">Hardware Binding:</strong> Salted SHA-256 signatures tying guest profiles to local storage vault.</li>
                     <li><strong className="text-white">Rate Limit Defense:</strong> Max 3 guest creations per 24-hour IP window against bot attacks.</li>

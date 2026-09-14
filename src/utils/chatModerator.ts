@@ -24,12 +24,30 @@ export const locationPatterns: RegExp[] = [
   // General street address patterns (Sector, Phase, Marg, Road, Colony, Apartment, Street, Society, etc.)
   /\b(sector|phase|block|pocket|flat|apt|apartment|tower|plot|street|avenue|lane|marg|vihar|colony|enclave|chowk|nagar|society|layout)\s*(?:no\.?|number|#)?\s*\d+[a-z0-9\s,-]*/gi,
 
-  // GPS Coordinates (Lat/Long pairs like 26.9124, 75.7873 or 26.9124 N, 75.7873 E)
+  // GPS Coordinates (Standard decimal Lat/Long pairs like 26.9124, 75.7873 or 26.9124 N, 75.7873 E)
   /\b[-+]?([1-8]?\d(\.\d+)?|90(\.0+)?)\s*[,;/]\s*[-+]?(180(\.0+)?|((1[0-7]\d)|([1-9]?\d))(\.\d+)?)\b/g,
   /\b\d{1,2}°\s*\d{1,2}'(?:\s*\d{1,2}(?:\.\d+)?")?\s*[NSEW]\b/gi,
 
-  // Map & Live Location URLs (Google Maps, Apple Maps, Waze, Bing Maps)
-  /(?:https?:\/\/)?(?:www\.)?(?:maps\.google\.com|goo\.gl\/maps|maps\.app\.goo\.gl|waze\.com|bing\.com\/maps|maps\.apple\.com)\S*/gi,
+  // Evasion: Spaced GPS Coordinates (e.g. 26 . 9124 , 75 . 7873 or coordinates with spaces)
+  /\b\d{1,2}\s*\.\s*\d{3,}\s*[,;/]\s*-?\d{1,3}\s*\.\s*\d{3,}\b/gi,
+  /\b(latitude|longitude|coords|coordinates)\s*[:=]?\s*[-+]?[\d\s.,+-]{6,}/gi,
+
+  // Google Plus Codes (Open Location Codes - OLC, e.g. 87G8M34X+48 or 7JFJ+R2 Jaipur)
+  /\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}(?:\s+[a-zA-Z]+)?\b/gi,
+
+  // What3Words (e.g. ///filled.count.soap or what3words.com/filled.count.soap)
+  /(?:\/{3}|what3words\.com\/)[a-zA-Z]{3,}\.[a-zA-Z]{3,}\.[a-zA-Z]{3,}/gi,
+
+  // Map & Live Location URLs (Google Maps, Apple Maps, Waze, Bing Maps, OpenStreetMap)
+  /(?:https?:\/\/)?(?:www\.)?(?:maps\.google\.com|goo\.gl\/maps|maps\.app\.goo\.gl|waze\.com|bing\.com\/maps|maps\.apple\.com|openstreetmap\.org)\S*/gi,
+
+  // Live Location Sharing & GPS Tracking Services (Glympse, Apple Find My, Snapchat Snap Map, Strava Beacon, Life360, Zenly, Telegram/WhatsApp Live Location)
+  /(?:https?:\/\/)?(?:www\.)?(?:glympse\.com|icloud\.com\/find|map\.snapchat\.com|strava\.com\/beacon|life360\.com|geozilla\.com|zenly\.app)\S*/gi,
+  /(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:share\/url\?url=|location|joinchat)\S*/gi,
+  /(?:https?:\/\/)?(?:www\.)?(?:wa\.me|api\.whatsapp\.com)\/(?:send\?|location)\S*/gi,
+
+  // URL Shorteners frequently used to disguise location links (bit.ly, tinyurl, t.co, etc.)
+  /(?:https?:\/\/)?(?:www\.)?(?:bit\.ly|tinyurl\.com|t\.co|cutt\.ly|is\.gd|rb\.gy|ow\.ly|buff\.ly|rebrand\.ly|shorturl\.at|soo\.gd)\/\S+/gi,
 
   // Location intent & disclosure phrases
   /\b(my location is|i am at|i'm at|i live in|i live at|current location[:=]|sharing location|share location|meet me at|come to my house|come to my place|track me at|here is my location)\b[^.!?\n]{2,50}/gi,

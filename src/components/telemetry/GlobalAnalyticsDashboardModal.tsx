@@ -17,12 +17,14 @@ interface GlobalAnalyticsDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: TabType;
+  onOpenCarromBadges?: () => void;
 }
 
 export const GlobalAnalyticsDashboardModal: React.FC<GlobalAnalyticsDashboardModalProps> = ({
   isOpen,
   onClose,
   initialTab = 'charts',
+  onOpenCarromBadges,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [selectedUser, setSelectedUser] = useState<TelemetryUser | null>(null);
@@ -239,6 +241,34 @@ export const GlobalAnalyticsDashboardModal: React.FC<GlobalAnalyticsDashboardMod
           {/* BADGES TAB */}
           {activeTab === 'badges' && (
             <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-amber-950/40 to-slate-900 border border-amber-500/40 p-4 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-xl shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                    🏆
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                      Carrom Badge System
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        656 Badges Master
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">150 Core • 6 Top Rank • 500 Special Challenges • Archive Vault</p>
+                  </div>
+                </div>
+                {onOpenCarromBadges && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenCarromBadges();
+                    }}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-xs transition active:scale-95 shadow-md flex items-center gap-2 shrink-0 cursor-pointer"
+                  >
+                    <span>Launch 656 Badge Menu</span>
+                  </button>
+                )}
+              </div>
+
               <div>
                 <h3 className="text-sm font-extrabold text-white uppercase tracking-wider font-mono">
                   Platform Progression Milestones & Badges Index

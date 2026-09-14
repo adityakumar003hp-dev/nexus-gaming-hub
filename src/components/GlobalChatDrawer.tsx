@@ -295,7 +295,7 @@ export const GlobalChatDrawer: React.FC<GlobalChatDrawerProps> = ({
       setModerationWarning('🚫 Location sharing is strictly prohibited on Chess.pro for your safety!');
       setTimeout(() => setModerationWarning(null), 5000);
       if (soundEnabled) {
-        soundFx.playLowTime();
+        soundFx.playError();
       }
       return;
     }
@@ -541,6 +541,20 @@ export const GlobalChatDrawer: React.FC<GlobalChatDrawerProps> = ({
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onPaste={(e) => {
+                const pasted = e.clipboardData?.getData('text') || '';
+                if (pasted) {
+                  const check = moderateChatMessage(pasted);
+                  if (check.hasLocationViolation) {
+                    e.preventDefault();
+                    setModerationWarning('🚫 Pasted location detected and blocked for your safety!');
+                    setTimeout(() => setModerationWarning(null), 5000);
+                    if (soundEnabled) {
+                      soundFx.playError();
+                    }
+                  }
+                }
+              }}
               placeholder="Send a global message..."
               maxLength={150}
               disabled={cooldownRemaining > 0}

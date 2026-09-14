@@ -88,6 +88,7 @@ import { GoogleFormsModal } from './components/GoogleFormsModal';
 import { FloatingSuiteAndTelemetryMenu } from './components/FloatingSuiteAndTelemetryMenu';
 import { AIElementBot } from './components/AIElementBot';
 import { CosmeticsShopModal } from './components/CosmeticsShopModal';
+import { CarromBadgeModal } from './components/CarromBadgeModal';
 import { DailyStreakModal } from './components/DailyStreakModal';
 import { getDailyStreakCount } from './utils/streakManager';
 import { FriendsModal } from './components/FriendsModal';
@@ -234,6 +235,7 @@ export default function App() {
   const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [isCarromBadgesOpen, setIsCarromBadgesOpen] = useState<boolean>(false);
   const [isWheelCatalogOpen, setIsWheelCatalogOpen] = useState<boolean>(false);
   const [selectedWheelGame, setSelectedWheelGame] = useState<GameCatalogItem | null>(null);
   const [isWheelGameLobbyOpen, setIsWheelGameLobbyOpen] = useState<boolean>(false);
@@ -1452,7 +1454,7 @@ export default function App() {
   const handleSendMessage = (text: string) => {
     const modResult = moderateChatMessage(text);
     if (modResult.hasLocationViolation) {
-      soundFx.playLowTime();
+      soundFx.playError();
       return;
     }
     const cleanText = modResult.cleanText;
@@ -2581,6 +2583,10 @@ export default function App() {
       <GlobalAnalyticsDashboardModal
         isOpen={isTelemetryOpen}
         onClose={() => setIsTelemetryOpen(false)}
+        onOpenCarromBadges={() => {
+          setIsTelemetryOpen(false);
+          setIsCarromBadgesOpen(true);
+        }}
       />
 
       {/* User Profile Modal */}
@@ -2593,6 +2599,10 @@ export default function App() {
           setIsProfileModalOpen(false);
           setIsDailyStreakOpen(true);
         }}
+        onOpenCarromBadges={() => {
+          setIsProfileModalOpen(false);
+          setIsCarromBadgesOpen(true);
+        }}
       />
 
       {/* Statistics & Match History Modal */}
@@ -2604,6 +2614,17 @@ export default function App() {
           setIsStatsModalOpen(false);
           setIsDailyStreakOpen(true);
         }}
+        onOpenCarromBadges={() => {
+          setIsStatsModalOpen(false);
+          setIsCarromBadgesOpen(true);
+        }}
+      />
+
+      {/* 🏆 Carrom Badge System Master Modal (656 Badges & Archive Vault) */}
+      <CarromBadgeModal
+        isOpen={isCarromBadgesOpen}
+        onClose={() => setIsCarromBadgesOpen(false)}
+        onOpenExchange={() => setIsExchangeModalOpen(true)}
       />
 
       {/* Matchmaking Modal */}

@@ -30,6 +30,11 @@ import { soundFx } from '../utils/audio';
 import { getUserPoints } from '../utils/pointsManager';
 import { getDefaultGuestHandle } from '../utils/auth';
 import { getDailyStreakCount } from '../utils/streakManager';
+import {
+  CarromBadge,
+  loadUserBadgesState,
+  getAllCarromBadges,
+} from '../data/carromBadgesData';
 
 export interface GameMetadataItem {
   id: string;
@@ -83,6 +88,7 @@ interface UserProfileModalProps {
   gameType?: string;
   onSelectGame?: (gameId: string) => void;
   onOpenDailyStreak?: () => void;
+  onOpenCarromBadges?: () => void;
 }
 
 function formatTime(totalSeconds: number): string {
@@ -102,10 +108,30 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   gameType: defaultGame = 'all',
   onSelectGame,
   onOpenDailyStreak,
+  onOpenCarromBadges,
 }) => {
   const [targetUsername, setTargetUsername] = useState(initialUsername || getDefaultGuestHandle());
   const [selectedGame, setSelectedGame] = useState<string>(defaultGame || 'all');
   const [searchInput, setSearchInput] = useState('');
+  const [equippedBadges, setEquippedBadges] = useState<CarromBadge[]>([]);
+
+  useEffect(() => {
+    const updateBadges = () => {
+      try {
+        const state = loadUserBadgesState();
+        const all = getAllCarromBadges();
+        const equipped = state.equippedBadges
+          .map((id) => all.find((b) => b.id === id))
+          .filter((b): b is CarromBadge => !!b);
+        setEquippedBadges(equipped);
+      } catch {
+        setEquippedBadges([]);
+      }
+    };
+    updateBadges();
+    window.addEventListener('carrom_badges_updated', updateBadges);
+    return () => window.removeEventListener('carrom_badges_updated', updateBadges);
+  }, [isOpen]);
 
   // Per game stats map
   const [gameStatsMap, setGameStatsMap] = useState<Record<string, GameStatDetail>>({});
@@ -438,6 +464,70 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </div>
               </div>
 
+            </div>
+          </div>
+
+          {/* ================= 1.5 EQUIPPED BADGES SHOWCASE (656-Badge System) ================= */}
+          <div className="w-full bg-[#0a0f1d] border border-slate-800/90 rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/60">
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-black text-white uppercase tracking-wider font-mono">
+                  EQUIPPED PROFILE BADGES (SHOWCASE)
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
+                  {equippedBadges.length} / 3
+                </span>
+              </div>
+              {onOpenCarromBadges && (
+                <button
+                  onClick={() => {
+                    onClose();
+                    onOpenCarromBadges();
+                  }}
+                  className="text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1.5 transition hover:underline cursor-pointer"
+                >
+                  <span>Open 656-Badge Menu &amp; Vault</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3.5">
+              {[0, 1, 2].map((idx) => {
+                const badge = equippedBadges[idx];
+                return (
+                  <div
+                    key={idx}
+                    className={`rounded-xl border p-3 flex items-center gap-3 transition ${
+                      badge
+                        ? 'bg-[#10172b] border-amber-500/40 shadow-sm'
+                        : 'bg-[#070b14]/60 border-dashed border-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {badge ? (
+                      <>
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-xl shrink-0">
+                          {badge.icon}
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <p className="text-xs font-bold text-white truncate">{badge.name}</p>
+                          <div className="flex items-center gap-1.5 text-[10px] text-amber-400 font-semibold">
+                            <span>{badge.tier}</span>
+                            <span>•</span>
+                            <span className="text-slate-400 truncate">{badge.subCategory}</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="w-full text-center py-2">
+                        <span className="text-xs font-medium text-slate-500 block">+ Empty Slot {idx + 1}</span>
+                        <span className="text-[10px] text-slate-600">Equip from Badge Menu</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 

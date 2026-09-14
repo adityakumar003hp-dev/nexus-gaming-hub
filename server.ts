@@ -22,6 +22,7 @@ import {
 } from './src/db/users.ts';
 import { adminAuth, adminDb, FieldValue } from './src/lib/firebase-admin.ts';
 import { moderateChatMessage } from './src/utils/chatModerator.ts';
+import { validateAddressWithGoogleMaps, containsRealWorldAddress } from './src/utils/googleMapsAddressValidator.ts';
 
 const app = express();
 const server = http.createServer(app);
@@ -43,6 +44,7 @@ app.use((req, res, next) => {
     "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; frame-ancestors 'self' https://*.google.com https://*.ai.studio;"
   );
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
   res.setHeader('X-DMARC-Policy', 'v=DMARC1; p=reject; sp=reject');
   res.setHeader('X-SPF-Protection', 'v=spf1 -all');
   next();
@@ -141,6 +143,42 @@ const usersByUsername = new Map<string, User>();
 const finishedGames: MatchRecord[] = [];
 const roomChats = new Map<string, ChatMessage[]>();
 const pvpRooms = new Map<string, PvPRoom>();
+
+// User Location Violation Tracker & Progressive Mute Policy (Strikes 1, 2, and 3)
+const locationViolationsByUser = new Map<string, { count: number; mutedUntil: number }>();
+
+function handleLocationViolationPenalty(userKey: string, reasonDetails?: string): { isMuted: boolean; message: string } {
+  const current = locationViolationsByUser.get(userKey) || { count: 0, mutedUntil: 0 };
+  const newCount = current.count + 1;
+  let mutedUntil = 0;
+  let warningMessage = '';
+
+  if (newCount === 1) {
+    warningMessage = `🚫 Strike 1/3: Location sharing is strictly prohibited on Chess.pro for player security${reasonDetails ? ` (${reasonDetails})` : ''}. Further attempts will trigger an automated chat mute.`;
+  } else if (newCount === 2) {
+    mutedUntil = Date.now() + 5 * 60 * 1000; // 5 minute mute
+    warningMessage = `⚠️ Strike 2/3: You have been temporarily muted from chat for 5 minutes for attempting to share physical location${reasonDetails ? ` (${reasonDetails})` : ''}.`;
+  } else {
+    mutedUntil = Date.now() + 24 * 60 * 60 * 1000; // 24 hour mute
+    warningMessage = `🔒 Strike 3/3: Chat privileges suspended for 24 hours due to repeated physical location sharing attempts${reasonDetails ? ` (${reasonDetails})` : ''}.`;
+  }
+
+  locationViolationsByUser.set(userKey, { count: newCount, mutedUntil });
+  return {
+    isMuted: mutedUntil > Date.now(),
+    message: warningMessage,
+  };
+}
+
+function checkUserChatMute(userKey: string): { isMuted: boolean; remainingSec: number } {
+  const entry = locationViolationsByUser.get(userKey);
+  if (!entry || !entry.mutedUntil) return { isMuted: false, remainingSec: 0 };
+  const now = Date.now();
+  if (entry.mutedUntil > now) {
+    return { isMuted: true, remainingSec: Math.ceil((entry.mutedUntil - now) / 1000) };
+  }
+  return { isMuted: false, remainingSec: 0 };
+}
 const globalChatMessages: any[] = [
   {
     id: 'msg_init_1',
@@ -4794,6 +4832,28 @@ Transcript: "${audioTranscript}"`;
   }
 });
 
+// Google Maps Geocoding Location Validation Endpoint (Source: Google Maps Platform Code Assist)
+app.post('/api/validate-location', async (req, res) => {
+  try {
+    const { text } = req.body || {};
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Text string is required for location validation' });
+    }
+    const result = await validateAddressWithGoogleMaps(text);
+    return res.json({
+      success: true,
+      isAddress: result.isAddress,
+      reason: result.reason,
+      formattedAddress: result.formattedAddress,
+      placeId: result.placeId,
+      cached: result.cached || false,
+      hasApiKey: Boolean(process.env.GOOGLE_MAPS_API_KEY),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Internal location validation error' });
+  }
+});
+
 // --- WebSockets Real-Time System ---
 const io = new SocketIOServer(server, {
   cors: { origin: '*' },
@@ -5282,9 +5342,21 @@ io.on('connection', (socket: Socket) => {
   });
 
   // Dedicated Room Real-Time Chat
-  socket.on('chat:send', (data: { roomId: string; text: string }) => {
+  socket.on('chat:send', async (data: { roomId: string; text: string }) => {
     if (!data.roomId || !data.text || !data.text.trim()) return;
     if (!currentUser) currentUser = getOrCreateGuestSession().user;
+
+    const userKey = currentUser.id || currentUser.username;
+    const muteStatus = checkUserChatMute(userKey);
+    if (muteStatus.isMuted) {
+      return socket.emit('chat:message', {
+        id: `sys_${Date.now()}`,
+        sender: '🛡️ SECURITY BOT',
+        text: `🔒 You are temporarily muted from chat (${muteStatus.remainingSec}s remaining) due to repeated location sharing violations.`,
+        timestamp: Date.now(),
+        isSystem: true,
+      });
+    }
 
     const room = pvpRooms.get(data.roomId);
     if (room && room.roomRules && room.roomRules.allowChat === false) {
@@ -5300,10 +5372,24 @@ io.on('connection', (socket: Socket) => {
     // Auto-moderation check: strict location prohibition & PII masking
     const modResult = moderateChatMessage(data.text);
     if (modResult.hasLocationViolation) {
+      const penalty = handleLocationViolationPenalty(userKey, modResult.prohibitionReason);
       return socket.emit('chat:message', {
         id: `sys_${Date.now()}`,
         sender: '🛡️ SECURITY BOT',
-        text: '🚫 Message blocked: Location sharing is strictly prohibited on Chess.pro for player security.',
+        text: penalty.message,
+        timestamp: Date.now(),
+        isSystem: true,
+      });
+    }
+
+    // Deep semantic check using Google Maps Geocoding API for real-world physical addresses
+    const addressCheck = await validateAddressWithGoogleMaps(data.text);
+    if (addressCheck.isAddress) {
+      const penalty = handleLocationViolationPenalty(userKey, addressCheck.formattedAddress || 'Real address detected');
+      return socket.emit('chat:message', {
+        id: `sys_${Date.now()}`,
+        sender: '🛡️ SECURITY BOT',
+        text: penalty.message,
         timestamp: Date.now(),
         isSystem: true,
       });
@@ -5335,9 +5421,23 @@ io.on('connection', (socket: Socket) => {
     });
   });
 
-  socket.on('global:send', (data: { id?: string; text: string; sender?: string; avatar?: string; tag?: string }) => {
+  socket.on('global:send', async (data: { id?: string; text: string; sender?: string; avatar?: string; tag?: string }) => {
     if (!data || !data.text || !data.text.trim()) return;
     if (!currentUser) currentUser = getOrCreateGuestSession().user;
+
+    const userKey = currentUser.id || currentUser.username;
+    const muteStatus = checkUserChatMute(userKey);
+    if (muteStatus.isMuted) {
+      return socket.emit('global:message', {
+        id: `sys_${Date.now()}`,
+        sender: '🛡️ SECURITY BOT',
+        avatar: '🛡️',
+        text: `🔒 You are temporarily muted from chat (${muteStatus.remainingSec}s remaining) due to repeated location sharing violations.`,
+        timestamp: Date.now(),
+        isOwner: false,
+        tag: 'SECURITY SYSTEM',
+      });
+    }
 
     const senderName = data.sender || currentUser.username;
     const isOwner = senderName.toLowerCase().includes('aditya') || currentUser.email === 'mukkuc41@gmail.com';
@@ -5345,11 +5445,27 @@ io.on('connection', (socket: Socket) => {
     // Auto-moderation check: strict location prohibition & PII masking
     const modResult = moderateChatMessage(data.text);
     if (modResult.hasLocationViolation) {
+      const penalty = handleLocationViolationPenalty(userKey, modResult.prohibitionReason);
       return socket.emit('global:message', {
         id: `sys_${Date.now()}`,
         sender: '🛡️ SECURITY BOT',
         avatar: '🛡️',
-        text: '🚫 Message blocked: Location sharing is strictly prohibited on Chess.pro for player security.',
+        text: penalty.message,
+        timestamp: Date.now(),
+        isOwner: false,
+        tag: 'SECURITY SYSTEM',
+      });
+    }
+
+    // Deep semantic check using Google Maps Geocoding API for real-world physical addresses
+    const addressCheck = await validateAddressWithGoogleMaps(data.text);
+    if (addressCheck.isAddress) {
+      const penalty = handleLocationViolationPenalty(userKey, addressCheck.formattedAddress || 'Real address detected');
+      return socket.emit('global:message', {
+        id: `sys_${Date.now()}`,
+        sender: '🛡️ SECURITY BOT',
+        avatar: '🛡️',
+        text: penalty.message,
         timestamp: Date.now(),
         isOwner: false,
         tag: 'SECURITY SYSTEM',
