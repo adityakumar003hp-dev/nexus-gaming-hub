@@ -256,32 +256,64 @@ export function spendPoints(amount: number, reason: string): boolean {
   return true;
 }
 
-export function applyMatchLossPenalty(gameNameOrId: string = 'Match', penaltyAmount: number = 10000): {
+export function applyMatchLossPenalty(
+  gameNameOrId: string = 'Match',
+  penaltyAmount: number = 50000,
+  gemsPenaltyAmount: number = 50000
+): {
   deducted: number;
   newBalance: number;
+  gemsDeducted: number;
+  newGemsBalance: number;
 } {
-  const current = getUserPoints();
-  const actualDeduction = Math.min(current, penaltyAmount);
-  const newBalance = Math.max(0, current - actualDeduction);
-  setUserPoints(newBalance, `Loss penalty applied in ${gameNameOrId} (-${actualDeduction.toLocaleString()} PTS)`);
+  const currentCoins = getUserPoints();
+  const currentGems = getUserGems();
 
-  if (actualDeduction > 0) {
-    import('./coinRewardEngine').then(m => {
+  const actualCoinsDeduction = Math.min(currentCoins, penaltyAmount);
+  const newCoinsBalance = Math.max(0, currentCoins - actualCoinsDeduction);
+
+  const actualGemsDeduction = Math.min(currentGems, gemsPenaltyAmount);
+  const newGemsBalance = Math.max(0, currentGems - actualGemsDeduction);
+
+  setUserPoints(
+    newCoinsBalance,
+    `Defeat penalty applied in ${gameNameOrId} (-${actualCoinsDeduction.toLocaleString()} Coins)`
+  );
+  setUserGems(
+    newGemsBalance,
+    `Defeat penalty applied in ${gameNameOrId} (-${actualGemsDeduction.toLocaleString()} Gems)`
+  );
+
+  if (actualCoinsDeduction > 0) {
+    import('./coinRewardEngine').then((m) => {
       m.executeCoinTransaction({
-        amount: -actualDeduction,
+        amount: -actualCoinsDeduction,
         type: 'match_loss',
-        description: `Match Defeat Penalty in ${gameNameOrId}`,
+        description: `Match Defeat Penalty in ${gameNameOrId} (-${actualCoinsDeduction} Coins, -${actualGemsDeduction} Gems)`,
         gameId: gameNameOrId,
-        metadata: { penaltyAmount: actualDeduction }
+        metadata: { penaltyAmount: actualCoinsDeduction, gemsPenalty: actualGemsDeduction },
       }).catch(() => {});
     }).catch(() => {});
   }
 
+  // Trigger Badge System check for match lost
+  import('../data/badgeSystem').then((m) => {
+    m.BadgeSystem.event('MATCH_LOST', { gameType: gameNameOrId });
+  }).catch(() => {});
+
+  // Sync to backend
+  syncBalancesToBackend(newGemsBalance, newCoinsBalance);
+
   return {
-    deducted: actualDeduction,
-    newBalance,
+    deducted: actualCoinsDeduction,
+    newBalance: newCoinsBalance,
+    gemsDeducted: actualGemsDeduction,
+    newGemsBalance,
   };
 }
+
+export { calculateMatchRewards, applyMatchSettlement } from './matchSettlement';
+export type { MatchRewardResult, MatchSettlementSummary } from './matchSettlement';
 
 // Daily Wheel Logic (Once every 24h, or cooldown countdown)
 const DAILY_WHEEL_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours

@@ -130,7 +130,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     };
     updateBadges();
     window.addEventListener('carrom_badges_updated', updateBadges);
-    return () => window.removeEventListener('carrom_badges_updated', updateBadges);
+    window.addEventListener('badge_system_updated', updateBadges);
+    return () => {
+      window.removeEventListener('carrom_badges_updated', updateBadges);
+      window.removeEventListener('badge_system_updated', updateBadges);
+    };
   }, [isOpen]);
 
   // Per game stats map

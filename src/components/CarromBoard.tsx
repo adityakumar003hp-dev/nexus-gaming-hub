@@ -23,7 +23,7 @@ import { CarromSoundSettingsModal } from './CarromSoundSettingsModal';
 import { BotAISettingsBar } from './BotAISettingsBar';
 import { CarromShopModal } from './CarromShopModal';
 import { CarromBadgeModal } from './CarromBadgeModal';
-import { loadUserBadgesState, recordCarromMatchOutcome } from '../data/carromBadgesData';
+import { BadgeSystem, loadUserBadgesState, recordCarromMatchOutcome } from '../data/badgeSystem';
 import { getUserPoints, getUserGems } from '../utils/pointsManager';
 import {
   CARROM_SHOP_DATA,
@@ -1004,6 +1004,14 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
       playCarromSound('pocket', topPiece?.type || 'white');
       setComboCount((c) => c + pocketedThisTurn.length);
 
+      // Dispatch real BadgeSystem event for Player 1
+      if (currentPlayer === 1) {
+        BadgeSystem.event('POCKET', { count: pocketedThisTurn.length });
+        if (pocketedThisTurn.some((p) => p.type === 'queen')) {
+          BadgeSystem.event('QUEEN_POCKETED');
+        }
+      }
+
       pocketedThisTurn.forEach((piece) => {
         if (carromFormat === 'classic') {
           if (piece.type === 'queen') {
@@ -1063,15 +1071,36 @@ export const CarromBoard: React.FC<CarromBoardProps> = ({
       const winReason = `Carrom Board Cleared! Final Score: Player 1 (${p1Final}) vs Player 2 (${p2Final})`;
       setMatchStatusText(`🏆 Match Over! ${winnerId === 'draw' ? 'Draw Match!' : `Player ${winnerId} Wins!`}`);
 
-      // Record match outcome & advance 656-Badge progression
+      // Record match outcome & advance 656-Badge progression via BadgeSystem
       try {
+        const isWon = winnerId === 1;
+        const isPerfect = isWon && p2Final === 0;
+        const isComeback = isWon && player1Score < player2Score;
+
+        if (opponentType === 'ai') {
+          if (isWon) {
+            BadgeSystem.event('AI_MATCH_WON', { difficulty: 'medium' });
+          } else if (winnerId === 2) {
+            BadgeSystem.event('AI_MATCH_LOST');
+          }
+        }
+
+        if (isWon) {
+          BadgeSystem.event('MATCH_WON', { mode: carromFormat });
+          if (isPerfect) BadgeSystem.event('PERFECT_GAME');
+          if (isComeback) BadgeSystem.event('COMEBACK_WIN');
+        } else if (winnerId === 2) {
+          BadgeSystem.event('MATCH_LOST');
+        }
+
         const badgeResult = recordCarromMatchOutcome({
-          won: winnerId === 1,
+          won: isWon,
           queens: pocketedThisTurn.filter((p) => p.type === 'queen').length,
           pockets: pocketedThisTurn.length,
-          isPerfect: winnerId === 1 && p2Final === 0,
-          isComeback: winnerId === 1 && player1Score < player2Score,
+          isPerfect,
+          isComeback,
         });
+
         if (badgeResult.newlyUnlocked.length > 0) {
           soundFx.playWin();
         }

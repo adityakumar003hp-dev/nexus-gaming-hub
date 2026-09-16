@@ -12,6 +12,7 @@ import {
   spendGems,
   addPoints,
   addGems,
+  calculateMatchRewards,
   syncBalancesToBackend,
 } from './pointsManager';
 import { soundFx } from './audio';
@@ -682,36 +683,52 @@ export const GameEconomy = {
   },
 
   // -------------------------------------------------------------
-  // MATCH WINNING REWARDS
+  // MATCH WINNING REWARDS & POSITION SETTLEMENT
   // -------------------------------------------------------------
-  claimMatchReward(rank: number): void {
-    let coinsEarned = 0;
-    let gemsEarned = 0;
+  claimMatchReward(rank: number, isWinner: boolean = true): void {
+    const settlement = calculateMatchRewards(rank, isWinner);
 
-    switch (rank) {
-      case 1: // 1st Place
-        coinsEarned = 2000;
-        gemsEarned = 90;
-        break;
-      case 2: // 2nd Place
-        coinsEarned = 1000;
-        gemsEarned = 60;
-        break;
-      case 3: // 3rd Place
-        coinsEarned = 500;
-        gemsEarned = 30;
-        break;
-      default:
-        alert('No rewards for ranks outside top 3.');
-        return;
+    if (settlement.coinsDelta >= 0) {
+      addPoints(settlement.coinsDelta, `Rank ${rank} Match Finish Reward`);
+    } else {
+      const currentCoins = getUserPoints();
+      setUserPoints(Math.max(0, currentCoins + settlement.coinsDelta), `Rank ${rank} Match Penalty`);
     }
 
-    addPoints(coinsEarned, `Rank ${rank} Match Finish Reward`);
-    addGems(gemsEarned, `Rank ${rank} Match Finish Reward`);
-    soundFx.playWin();
+    if (settlement.gemsDelta >= 0) {
+      addGems(settlement.gemsDelta, `Rank ${rank} Match Finish Reward`);
+    } else {
+      const currentGems = getUserGems();
+      setUserGems(Math.max(0, currentGems + settlement.gemsDelta), `Rank ${rank} Match Penalty`);
+    }
+
+    if (isWinner && settlement.coinsDelta > 0) {
+      soundFx.playWin();
+      if (rank === 1) {
+        import('../data/badgeSystem').then((m) => {
+          m.BadgeSystem.event('1ST_PLACE_WIN');
+          m.BadgeSystem.event('COINS_EARNED', { amount: settlement.coinsDelta });
+          m.BadgeSystem.event('GEMS_EARNED', { amount: settlement.gemsDelta });
+        }).catch(() => {});
+      }
+    } else {
+      soundFx.playGameOver(false);
+    }
+
     this.updateUI();
 
-    alert(`🏆 Rank ${rank} Finish!\nAwarded: +${coinsEarned} 🪙 Coins & +${gemsEarned} 💎 Gems!`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('match:settlement', {
+          detail: {
+            rank,
+            isWinner,
+            ...settlement,
+            newBalance: { coins: getUserPoints(), gems: getUserGems() },
+          },
+        })
+      );
+    }
   },
 
   // -------------------------------------------------------------

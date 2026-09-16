@@ -640,13 +640,29 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="admin-close-btn w-9 h-9 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer text-lg font-bold"
-            id="btn-close-admin-panel"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                onClose();
+                if ((window as any).openAdminAnalytics) {
+                  (window as any).openAdminAnalytics();
+                }
+              }}
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-sky-500/20 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+              title="Launch Duo Chess Arena Admin Analytics Dashboard"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Admin Analytics</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="admin-close-btn w-9 h-9 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer text-lg font-bold"
+              id="btn-close-admin-panel"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Bar */}

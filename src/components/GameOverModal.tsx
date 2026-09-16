@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { GameResult, PlayerInfo, ActiveBoardGame } from '../types';
-import { Trophy, RefreshCw, Eye, AlertTriangle, Share2, Flame, Coins, Sparkles } from 'lucide-react';
+import { Trophy, RefreshCw, Eye, AlertTriangle, Share2, Flame, Coins, Sparkles, Gem } from 'lucide-react';
 import { ShareProgressModal } from './ShareProgressModal';
 import { isSiteOwner } from '../utils/owner';
 import { OwnerBadge } from './OwnerBadge';
 import { GAME_DEFEAT_MESSAGES } from '../data/gameDefeatMessages';
-import { getUserPoints } from '../utils/pointsManager';
+import { getUserPoints, getUserGems } from '../utils/pointsManager';
 import { awardMatchCompletion, CoinRewardBreakdown, awardSocialShare } from '../utils/coinRewardEngine';
+import { calculateMatchRewards } from '../utils/matchSettlement';
 
 interface GameOverModalProps {
   result: GameResult;
@@ -18,6 +19,7 @@ interface GameOverModalProps {
   isDefeat?: boolean;
   defeatSubtitle?: string;
   moveCount: number;
+  rank?: number;
   onNewGame: () => void;
   onReviewBoard: () => void;
   onOpenCoinHistory?: () => void;
@@ -32,12 +34,14 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   isDefeat: explicitDefeat,
   defeatSubtitle,
   moveCount,
+  rank: explicitRank,
   onNewGame,
   onReviewBoard,
   onOpenCoinHistory,
 }) => {
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [walletPoints, setWalletPoints] = useState<number>(getUserPoints());
+  const [walletGems, setWalletGems] = useState<number>(getUserGems());
   const [rewardBreakdown, setRewardBreakdown] = useState<CoinRewardBreakdown | null>(null);
   const hasAwardedRef = useRef(false);
 
@@ -53,16 +57,30 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
   const isDraw = result.winner === 'draw';
   const isVictory = !isLoss && !isDraw && result.winner !== null;
+  const effectiveRank = explicitRank || (isVictory ? 1 : 2);
+  const matchSettlement = calculateMatchRewards(effectiveRank, !isLoss && !isDraw);
 
   useEffect(() => {
     setWalletPoints(getUserPoints());
+    setWalletGems(getUserGems());
+
     const handlePointsUpdate = (e: any) => {
       if (e.detail?.points !== undefined) {
         setWalletPoints(e.detail.points);
       }
     };
+    const handleGemsUpdate = (e: any) => {
+      if (e.detail?.gems !== undefined) {
+        setWalletGems(e.detail.gems);
+      }
+    };
+
     window.addEventListener('chess_points_updated', handlePointsUpdate);
-    return () => window.removeEventListener('chess_points_updated', handlePointsUpdate);
+    window.addEventListener('chess_gems_updated', handleGemsUpdate);
+    return () => {
+      window.removeEventListener('chess_points_updated', handlePointsUpdate);
+      window.removeEventListener('chess_gems_updated', handleGemsUpdate);
+    };
   }, []);
 
   useEffect(() => {
@@ -217,81 +235,82 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             {getSubheaderText()}
           </p>
 
-          {/* Victory / Draw Coin Reward Box */}
-          {(isVictory || isDraw) && rewardBreakdown && (
-            <div className="mb-5 bg-gradient-to-b from-emerald-950/70 to-emerald-950/40 border border-emerald-500/40 rounded-2xl p-4 text-left shadow-xl shadow-black/40 backdrop-blur-md relative overflow-hidden">
+          {/* Match Reward / Position Settlement Box */}
+          {matchSettlement && (
+            <div
+              className={`mb-5 border rounded-2xl p-4 text-left shadow-xl shadow-black/40 backdrop-blur-md relative overflow-hidden ${
+                matchSettlement.coinsDelta > 0
+                  ? 'bg-gradient-to-b from-emerald-950/80 to-emerald-950/40 border-emerald-500/40'
+                  : 'bg-gradient-to-b from-red-950/80 to-red-950/40 border-red-500/40'
+              }`}
+            >
               <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-1.5 text-xs font-black tracking-wider uppercase text-emerald-400">
-                  <Sparkles className="w-4 h-4 text-emerald-400 fill-emerald-400/30" />
-                  <span>{isVictory ? 'VICTORY COINS AWARDED' : 'DRAW CONSOLATION BONUS'}</span>
+                <div
+                  className={`flex items-center gap-1.5 text-xs font-black tracking-wider uppercase ${
+                    matchSettlement.coinsDelta > 0 ? 'text-emerald-400' : 'text-rose-400'
+                  }`}
+                >
+                  {matchSettlement.coinsDelta > 0 ? (
+                    <Sparkles className="w-4 h-4 text-emerald-400 fill-emerald-400/30" />
+                  ) : (
+                    <Flame className="w-4 h-4 text-rose-500 fill-rose-500/30" />
+                  )}
+                  <span>
+                    {isLoss
+                      ? 'MATCH DEFEAT PENALTY'
+                      : effectiveRank === 1
+                      ? '1ST PLACE CHAMPION REWARD'
+                      : `RANK ${effectiveRank} SETTLEMENT`}
+                  </span>
                 </div>
-                <span className="px-2.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-[11px] font-mono font-bold text-emerald-300 shadow-inner">
-                  +{rewardBreakdown.totalCoins} COINS
-                </span>
-              </div>
-
-              {/* Breakdown details */}
-              <div className="space-y-1 text-xs text-emerald-100/90 mb-3 font-medium">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-300">Base Match Award:</span>
-                  <span className="font-mono font-bold text-emerald-300">+{rewardBreakdown.baseCoins} 🪙</span>
-                </div>
-                {rewardBreakdown.streakBonus > 0 && (
-                  <div className="flex items-center justify-between text-amber-300">
-                    <span className="flex items-center gap-1">
-                      <Flame className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{rewardBreakdown.currentStreak}x Win Streak Bonus:</span>
-                    </span>
-                    <span className="font-mono font-bold">+{rewardBreakdown.streakBonus} 🪙</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Wallet and History Link */}
-              <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20 text-[11px]">
-                {onOpenCoinHistory ? (
-                  <button
-                    onClick={onOpenCoinHistory}
-                    className="text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold shadow-inner ${
+                      matchSettlement.coinsDelta > 0
+                        ? 'bg-emerald-950/90 border border-emerald-500/40 text-emerald-300'
+                        : 'bg-red-950/90 border border-red-500/40 text-rose-300'
+                    }`}
                   >
-                    View Coin History Ledger &rarr;
-                  </button>
-                ) : (
-                  <span className="text-emerald-400/80 font-medium">Firestore Audit Log Synced</span>
-                )}
-                <span className="font-bold font-mono text-amber-400">
-                  Wallet: {walletPoints.toLocaleString()} PTS
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Loss Penalty Box - Rendered whenever player loses */}
-          {isLoss && (
-            <div className="mb-5 bg-gradient-to-b from-red-950/70 to-red-950/40 border border-red-500/40 rounded-2xl p-4 text-left shadow-xl shadow-black/40 backdrop-blur-md relative overflow-hidden">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-1.5 text-xs font-black tracking-wider uppercase text-rose-400">
-                  <Flame className="w-4 h-4 text-rose-500 fill-rose-500/30" />
-                  <span>LOSS PENALTY APPLIED</span>
+                    {matchSettlement.coinsDelta > 0 ? `+${matchSettlement.coinsDelta.toLocaleString()}` : matchSettlement.coinsDelta.toLocaleString()} 🪙
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold shadow-inner ${
+                      matchSettlement.gemsDelta > 0
+                        ? 'bg-emerald-950/90 border border-emerald-500/40 text-cyan-300'
+                        : 'bg-red-950/90 border border-red-500/40 text-rose-300'
+                    }`}
+                  >
+                    {matchSettlement.gemsDelta > 0 ? `+${matchSettlement.gemsDelta.toLocaleString()}` : matchSettlement.gemsDelta.toLocaleString()} 💎
+                  </span>
                 </div>
-                <span className="px-2.5 py-0.5 rounded bg-red-950/90 border border-red-500/40 text-[11px] font-mono font-bold text-rose-300 shadow-inner">
-                  -10,000 PTS
-                </span>
               </div>
 
-              {/* Distinct Game-Specific Explanation Message */}
-              <p className="text-xs text-rose-100/90 leading-relaxed mb-3 font-medium">
-                {gameMeta.penaltyDescription}
+              {/* Status explanation */}
+              <p
+                className={`text-xs leading-relaxed mb-3 font-medium ${
+                  matchSettlement.coinsDelta > 0 ? 'text-emerald-100/90' : 'text-rose-100/90'
+                }`}
+              >
+                {matchSettlement.statusText}
               </p>
 
-              {/* Series & Wallet Balance */}
-              <div className="flex items-center justify-between pt-2 border-t border-red-500/20 text-[11px]">
-                <span className="text-rose-300/80 font-medium">
-                  {gameMeta.seriesLabel}
+              {/* Wallet Balances */}
+              <div
+                className={`flex items-center justify-between pt-2 border-t text-[11px] ${
+                  matchSettlement.coinsDelta > 0 ? 'border-emerald-500/20' : 'border-red-500/20'
+                }`}
+              >
+                <span className={matchSettlement.coinsDelta > 0 ? 'text-emerald-300/80 font-medium' : 'text-rose-300/80 font-medium'}>
+                  {gameMeta.seriesLabel || 'Competitive League'}
                 </span>
-                <span className="font-bold font-mono text-amber-400">
-                  Wallet: {walletPoints.toLocaleString()} PTS
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold font-mono text-amber-400">
+                    🪙 {walletPoints.toLocaleString()}
+                  </span>
+                  <span className="font-bold font-mono text-cyan-300">
+                    💎 {walletGems.toLocaleString()}
+                  </span>
+                </div>
               </div>
             </div>
           )}

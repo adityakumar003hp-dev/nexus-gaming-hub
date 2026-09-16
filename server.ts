@@ -23,6 +23,11 @@ import {
 import { adminAuth, adminDb, FieldValue } from './src/lib/firebase-admin.ts';
 import { moderateChatMessage } from './src/utils/chatModerator.ts';
 import { validateAddressWithGoogleMaps, containsRealWorldAddress } from './src/utils/googleMapsAddressValidator.ts';
+import {
+  TOP_150_LEADERBOARD_REWARDS,
+  getLeaderboardPayout,
+  LEADERBOARD_REWARDS_LIST,
+} from './src/utils/leaderboardRewards.ts';
 
 const app = express();
 const server = http.createServer(app);
@@ -81,6 +86,8 @@ interface User {
   privacyAgreed?: boolean;
   privacyAgreedAt?: number;
   accumulatedGameTimeSeconds?: number;
+  coins?: number;
+  gems?: number;
 }
 
 interface MatchRecord {
@@ -1893,12 +1900,32 @@ const SEEDED_LEADERBOARDS_MAP: Record<string, any[]> = {
   speed: [
     { username: 'SpitSpeed_Demon', score: 2220, times_played: 54, wins: 50, losses: 4, draws: 0, resigns: 0, total_time_seconds: 7100, lastActive: Date.now() },
   ],
+  carrom: [
+    { username: 'ADITYA-OWNER', score: 2610, times_played: 110, wins: 102, losses: 5, draws: 3, resigns: 0, total_time_seconds: 36000, lastActive: Date.now() },
+    { username: 'StrikerLegend_Raj', score: 2310, times_played: 60, wins: 55, losses: 5, draws: 0, resigns: 0, total_time_seconds: 13200, lastActive: Date.now() - 1200000 },
+  ],
+  darts: [
+    { username: 'ADITYA-OWNER', score: 2590, times_played: 98, wins: 91, losses: 4, draws: 3, resigns: 0, total_time_seconds: 32000, lastActive: Date.now() },
+    { username: 'Bullseye_Sniper', score: 2390, times_played: 68, wins: 62, losses: 6, draws: 0, resigns: 0, total_time_seconds: 14200, lastActive: Date.now() - 1500000 },
+    { username: 'Triple20_Phil', score: 2160, times_played: 49, wins: 41, losses: 8, draws: 0, resigns: 1, total_time_seconds: 9800, lastActive: Date.now() - 1800000 },
+  ],
+  pingpong: [
+    { username: 'ADITYA-OWNER', score: 2620, times_played: 115, wins: 108, losses: 4, draws: 3, resigns: 0, total_time_seconds: 38000, lastActive: Date.now() },
+    { username: 'SpinMaster_Ma', score: 2420, times_played: 72, wins: 66, losses: 6, draws: 0, resigns: 0, total_time_seconds: 15800, lastActive: Date.now() - 2100000 },
+    { username: 'PaddleAce_Timo', score: 2210, times_played: 55, wins: 47, losses: 8, draws: 0, resigns: 0, total_time_seconds: 11900, lastActive: Date.now() - 4200000 },
+  ],
+  business: [
+    { username: 'ADITYA-OWNER', score: 2680, times_played: 130, wins: 122, losses: 4, draws: 4, resigns: 0, total_time_seconds: 44000, lastActive: Date.now() },
+    { username: 'Arjun_Tycoon', score: 2580, times_played: 80, wins: 72, losses: 8, draws: 0, resigns: 0, total_time_seconds: 18400, lastActive: Date.now() - 2500000 },
+    { username: 'Sneha_Empire', score: 2340, times_played: 64, wins: 54, losses: 10, draws: 0, resigns: 0, total_time_seconds: 14200, lastActive: Date.now() - 3600000 },
+  ],
 };
 
 const ALL_GAME_KEYS = [
   'chess', 'checkers', 'backgammon', 'snakes', 'ludo', 'gomoku',
   'reversi', 'connect4', 'ultimatetictactoe', 'dotsandboxes',
-  'battleship', 'sim', 'uno', 'hearts', 'ginrummy', 'speed'
+  'battleship', 'sim', 'uno', 'hearts', 'ginrummy', 'speed',
+  'carrom', 'darts', 'pingpong', 'business'
 ];
 
 // Helper: Get real-time leaderboard data for a specific game with dynamic ranking
@@ -2021,15 +2048,105 @@ function getLeaderboardData(requestedGame: string = 'chess') {
   });
 
   list.sort((a, b) => {
+    const isOwnerA = isSiteOwner(a.username);
+    const isOwnerB = isSiteOwner(b.username);
+    if (isOwnerA && !isOwnerB) return -1;
+    if (!isOwnerA && isOwnerB) return 1;
     if (b.score !== a.score) return b.score - a.score;
     if (b.wins !== a.wins) return b.wins - a.wins;
     return b.times_played - a.times_played;
   });
 
-  return list.map((item, index) => ({
-    ...item,
-    global_rank: index + 1,
-  })).slice(0, 50);
+  // Ensure every game has a complete Top 1 to 150 Global Leaderboard
+  const existingUsernames = new Set(list.map((item) => item.username.toLowerCase()));
+  if (list.length < 150) {
+    const candidateNames = [
+      'Grandmaster_Alex', 'ChessKing_99', 'TacticsQueen', 'CrownMaster_Sam', 'PipMaster_Elena',
+      'LudoEmperor', 'SuperGrid_Ninja', 'WildCard_Champion', 'StrikerLegend_Raj', 'SpinMaster_Ma',
+      'Admiral_Nelson', 'Bullseye_Sniper', 'Arjun_Tycoon', 'DoubleJump_Pro', 'BearingOff_King',
+      'LadderRunner_Max', 'TokenCapturer', 'FiveStone_Master', 'CornerFlipper', 'GravityAligner',
+      'ChainMaster_Dan', 'GraphTheory_Ace', 'MoonShooter_007', 'MeldMaster_Gin', 'SpitSpeed_Demon',
+      'Triple20_Phil', 'PaddleAce_Timo', 'Sneha_Empire', 'ApexKnight', 'VortexBishop',
+      'ShadowRook', 'BlitzPawn', 'MasterMind_99', 'TitanStrategist', 'QuantumGamer',
+      'NovaPawn', 'EchoMaster', 'CosmicPlayer', 'DragonRook', 'PhoenixQueen',
+      'SilverFox_88', 'GoldenKing', 'IronDefense', 'NeonStriker', 'TurboTactics',
+      'AlphaPawn', 'BetaBishop', 'GammaKnight', 'DeltaRook', 'OmegaKing',
+      'SolarFlare', 'LunarEclipse', 'AeroKnight', 'CyberStrategist', 'HyperPawn',
+      'InfinityQueen', 'ZenMaster_01', 'StormBringer', 'ThunderPawn', 'FrostBishop',
+      'BlazeKing', 'ShadowHunter', 'PhantomKnight', 'Valkyrie_77', 'SamuraiTactic',
+      'RoninPawn', 'ShinobiMaster', 'Vanguard_99', 'Centurion_X', 'GladiatorPro',
+      'SpartanKing', 'TitanRook', 'OlympianPlayer', 'VortexChampion', 'ApexGlory',
+      'RaptorPawn', 'FalconMaster', 'EagleEye_Pro', 'HawkEye_99', 'CobraCommander',
+      'ViperTactics', 'PantherRider', 'TigerStrike', 'LionHeart_Pro', 'WolfPack_Ace',
+      'BearClaw_99', 'FoxHound_Pro', 'StarlightGamer', 'SunburstKnight', 'MoonlightQueen',
+      'AstralPlayer', 'GalacticPawn', 'NebulaMaster', 'CometStrike', 'MeteorShower',
+      'Supernova_99', 'PulsarQueen', 'QuasarKing', 'CosmoRider', 'AstroKnight',
+      'ZephyrPawn', 'TempestKing', 'CycloneQueen', 'TornadoMaster', 'HurricanePro',
+      'Thunderbolt_99', 'LightningFast', 'BlizzardKing', 'Avalanche_Ace', 'TsunamiMaster',
+      'Earthshaker', 'MagmaRook', 'VolcanoQueen', 'GeyserPawn', 'CraterKing',
+      'CrystalPawn', 'DiamondKnight', 'EmeraldQueen', 'RubyMaster', 'SapphirePro',
+      'TopazKing', 'AmethystRider', 'OnyxKnight', 'PlatinumQueen', 'TitaniumPawn',
+      'SteelRook', 'IronClad_99', 'BronzeTitan', 'CopperMaster', 'GoldenEagle',
+      'SilverHawk', 'RavenClaw_99', 'NightOwl_Pro', 'FalconPunch', 'ThunderBird',
+      'PhoenixRise', 'GriffinRook', 'HydraMaster', 'KrakenKing', 'LeviathanPro',
+      'AbyssWatcher', 'VortexRider', 'NovaBlast', 'ZenithKnight', 'ApexPredator',
+      'Solaris_Pro', 'EclipseRider', 'QuantumLeap', 'HyperionKing', 'ChronosMaster',
+      'SpecterPawn', 'WraithKnight', 'ShadowBlade', 'IronWill_99', 'ValorHeart',
+      'AegisShield', 'BastionMaster', 'SentinelPro', 'Paladin_77', 'CrusaderKing'
+    ];
+
+    let nameIdx = 0;
+    while (list.length < 150) {
+      const rankPos = list.length + 1;
+      let chosenName = '';
+      while (nameIdx < candidateNames.length) {
+        const candidate = candidateNames[nameIdx++];
+        if (!existingUsernames.has(candidate.toLowerCase())) {
+          chosenName = candidate;
+          break;
+        }
+      }
+      if (!chosenName) {
+        chosenName = `Challenger_${targetGame.toUpperCase()}_${rankPos}`;
+      }
+      existingUsernames.add(chosenName.toLowerCase());
+
+      const computedScore = Math.max(
+        1050,
+        Math.round(2500 - ((rankPos - 2) * 9.8) + (Math.sin(rankPos * 1.5) * 5))
+      );
+      const computedWins = Math.max(2, Math.round((computedScore - 950) / 16));
+      const computedLosses = Math.max(1, Math.round(computedWins * (0.16 + (rankPos * 0.003))));
+      const computedDraws = rankPos % 5 === 0 ? 2 : rankPos % 3 === 0 ? 1 : 0;
+      const totalG = computedWins + computedLosses + computedDraws;
+      const computedWinRate = Math.round((computedWins / totalG) * 100);
+
+      list.push({
+        username: chosenName,
+        score: computedScore,
+        times_played: totalG,
+        wins: computedWins,
+        losses: computedLosses,
+        draws: computedDraws,
+        resigns: Math.floor(computedLosses * 0.1),
+        total_time_seconds: totalG * 180,
+        totalGames: totalG,
+        winRate: computedWinRate,
+        lastActive: Date.now() - (rankPos * 120000),
+      });
+    }
+  }
+
+  return list.map((item, index) => {
+    const rank = index + 1;
+    const payout = getLeaderboardPayout(rank);
+    return {
+      ...item,
+      global_rank: rank,
+      rewardPayout: payout,
+      formattedPayout: payout.toLocaleString(),
+    };
+  }).slice(0, 150);
 }
 
 function getAllLeaderboardsMap() {
@@ -2056,6 +2173,119 @@ app.get('/api/leaderboard', (req, res) => {
     res.json(getAllLeaderboardsMap());
   } else {
     res.json(getLeaderboardData(game));
+  }
+});
+
+// Top 1 to 150 Global Leaderboard Rewards Schedule Table
+app.get('/api/leaderboard/rewards', (req, res) => {
+  res.json({
+    success: true,
+    count: LEADERBOARD_REWARDS_LIST.length,
+    rewards: LEADERBOARD_REWARDS_LIST,
+  });
+});
+
+// Claim Global Leaderboard Rank Reward
+app.post('/api/leaderboard/claim-reward', async (req, res) => {
+  try {
+    const { gameType = 'chess', rank } = req.body;
+    let targetUid = req.body.userId;
+    if (!targetUid && req.headers.authorization?.startsWith('Bearer ')) {
+      const authHeaderToken = req.headers.authorization.split(' ')[1];
+      const found = usersByToken.get(authHeaderToken);
+      if (found) targetUid = found.id;
+    }
+    if (!targetUid) {
+      targetUid = 'guest_' + Math.floor(1000 + Math.random() * 9000);
+    }
+
+    const rankNum = Number(rank);
+    if (isNaN(rankNum) || rankNum < 1 || rankNum > 150) {
+      return res.status(400).json({ success: false, error: 'Rank must be between 1 and 150' });
+    }
+
+    const payout = getLeaderboardPayout(rankNum);
+    if (!payout) {
+      return res.status(400).json({ success: false, error: 'No payout found for rank ' + rankNum });
+    }
+
+    // Award payout in Coins and Gems
+    let targetUser = usersById.get(targetUid) || usersByUsername.get(targetUid) || usersByToken.get(targetUid);
+    let currentCoins = targetUser?.coins ?? 10000;
+    let currentGems = targetUser?.gems ?? 10000;
+
+    if (adminDb && targetUid && !targetUid.startsWith('guest_')) {
+      try {
+        const userRef = adminDb.collection('users').doc(targetUid);
+        const userDoc = await userRef.get();
+        if (userDoc.exists) {
+          const udata = userDoc.data() || {};
+          if (typeof udata.coins === 'number') currentCoins = udata.coins;
+          if (typeof udata.gems === 'number') currentGems = udata.gems;
+        }
+
+        const updatedCoins = currentCoins + payout;
+        const updatedGems = currentGems + payout;
+
+        await userRef.set(
+          {
+            coins: updatedCoins,
+            gems: updatedGems,
+            lastLeaderboardReward: {
+              gameType,
+              rank: rankNum,
+              payout,
+              timestamp: new Date().toISOString(),
+            },
+          },
+          { merge: true }
+        );
+
+        currentCoins = updatedCoins;
+        currentGems = updatedGems;
+      } catch (dbErr) {
+        console.warn('[Leaderboard Claim DB Warning]:', dbErr);
+        currentCoins += payout;
+        currentGems += payout;
+      }
+    } else {
+      currentCoins += payout;
+      currentGems += payout;
+    }
+
+    if (targetUser) {
+      targetUser.coins = currentCoins;
+      targetUser.gems = currentGems;
+      savePersistentUsers();
+    }
+
+    // Emit balance update
+    io.emit('user:balance_updated', {
+      userId: targetUid,
+      coins: currentCoins,
+      gems: currentGems,
+    });
+
+    if (rankNum <= 10) {
+      io.emit('chat:system_broadcast', {
+        id: `sys_lead_claim_${Date.now()}`,
+        sender: 'Global Leaderboard',
+        text: `🏆 ${targetUser?.username || targetUid} claimed Rank #${rankNum} Global Leaderboard Payout in ${gameType.toUpperCase()}: ${payout.toLocaleString()} Coins & ${payout.toLocaleString()} Gems!`,
+        type: 'trophy',
+        timestamp: Date.now(),
+      });
+    }
+
+    res.json({
+      success: true,
+      rank: rankNum,
+      gameType,
+      payout,
+      newBalance: { coins: currentCoins, gems: currentGems },
+      message: `Successfully claimed ${payout.toLocaleString()} Coins & ${payout.toLocaleString()} Gems for Rank #${rankNum}!`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Failed to claim reward' });
   }
 });
 
@@ -3565,6 +3795,103 @@ app.get('/api/admin/overview', (req, res) => {
   });
 });
 
+// Admin Analytics Dashboard Telemetry Endpoint
+app.get('/api/admin/analytics', (req, res) => {
+  const range = (req.query.range as string) || 'today';
+  const multiplier = range === '30days' ? 4.2 : range === '7days' ? 2.1 : 1.0;
+
+  const kpis = {
+    totalUsers: { value: Math.round(48732 * (range === 'today' ? 1 : multiplier * 0.9)), change: '+12.5%', period: 'vs. previous 7 days', isPositive: true },
+    dau: { value: Math.round(8421 * (range === 'today' ? 1 : multiplier * 0.8)), change: '+18.7%', period: 'vs. previous 7 days', isPositive: true },
+    usersLoggedInToday: { value: Math.round(12346 * (range === 'today' ? 1 : multiplier)), change: '+22.3%', period: 'vs. previous 7 days', isPositive: true },
+    usersCurrentlyPlaying: { value: 4892, change: '+16.8%', period: 'vs. previous 7 days', isPositive: true },
+    newUsersToday: { value: Math.round(2487 * (range === 'today' ? 1 : multiplier * 0.95)), change: '+25.6%', period: 'vs. previous 7 days', isPositive: true },
+    returningUsers: { value: Math.round(3924 * (range === 'today' ? 1 : multiplier * 1.05)), change: '+14.2%', period: 'vs. previous 7 days', isPositive: true },
+    totalGamesPlayedToday: { value: Math.round(28671 * (range === 'today' ? 1 : multiplier * 1.1)), change: '+20.4%', period: 'vs. previous 7 days', isPositive: true },
+    avgSessionTime: { value: '42m 18s', change: '+8.7%', period: 'vs. previous 7 days', isPositive: true },
+  };
+
+  const liveUsers = {
+    currentlyOnline: 7482,
+    playing: 4892,
+    inLobby: 1203,
+    idle: 842,
+    offline: 545,
+  };
+
+  const liveActivityFeed = [
+    { id: 'act_1', user: 'Rahul_123', action: 'joined the game', game: 'Chess', timeAgo: '2 min ago', type: 'join' },
+    { id: 'act_2', user: 'PriyaSingh', action: 'logged in', game: null, timeAgo: '2 min ago', type: 'login' },
+    { id: 'act_3', user: 'GamingPro', action: 'started Chess', game: 'Chess', timeAgo: '4 min ago', type: 'game_start' },
+    { id: 'act_4', user: 'Suresh_77', action: 'started Ludo', game: 'Ludo', timeAgo: '6 min ago', type: 'game_start' },
+    { id: 'act_5', user: 'Anita', action: 'completed Checkers', game: 'Checkers', timeAgo: '8 min ago', type: 'game_end' },
+    { id: 'act_6', user: 'DevKumar', action: 'left match', game: 'Duo Chess', timeAgo: '10 min ago', type: 'match_leave' },
+    { id: 'act_7', user: 'Riya_001', action: 'logged in', game: null, timeAgo: '12 min ago', type: 'login' },
+    { id: 'act_8', user: 'Arjun', action: 'started Snakes & Ladders', game: 'Snakes & Ladders', timeAgo: '14 min ago', type: 'game_start' },
+    { id: 'act_9', user: 'Vikram_Ace', action: 'won Carrom match', game: 'Carrom', timeAgo: '16 min ago', type: 'game_end' },
+    { id: 'act_10', user: 'Sneha_Empire', action: 'created tournament lobby', game: 'Chess', timeAgo: '18 min ago', type: 'tournament' }
+  ];
+
+  const gamesPlayed = [
+    { id: 'chess', name: 'Chess', icon: '♔', color: '#38bdf8', players: 6842, matches: 5213, sessions: 6100, playTimeHours: 1842, formattedPlayTime: '18h 24m', avgSession: '48m', trend: 'up' },
+    { id: 'checkers', name: 'Draughts / Checkers', icon: '👑', color: '#f43f5e', players: 4200, matches: 3221, sessions: 3900, playTimeHours: 970, formattedPlayTime: '9h 42m', avgSession: '32m', trend: 'up' },
+    { id: 'carrom', name: 'Carrom', icon: '🥏', color: '#2dd4bf', players: 2900, matches: 2874, sessions: 2800, playTimeHours: 735, formattedPlayTime: '7h 21m', avgSession: '28m', trend: 'up' },
+    { id: 'ludo', name: 'Ludo', icon: '🎯', color: '#4ade80', players: 2732, matches: 4102, sessions: 3800, playTimeHours: 1226, formattedPlayTime: '12h 16m', avgSession: '35m', trend: 'up' },
+    { id: 'snakes', name: 'Snakes & Ladders', icon: '🐍', color: '#facc15', players: 2100, matches: 2531, sessions: 2300, playTimeHours: 630, formattedPlayTime: '6h 18m', avgSession: '24m', trend: 'up' },
+    { id: 'backgammon', name: 'Backgammon', icon: '🎲', color: '#c084fc', players: 1800, matches: 2102, sessions: 1950, playTimeHours: 578, formattedPlayTime: '5h 47m', avgSession: '22m', trend: 'up' },
+    { id: 'speed', name: 'Speed Card', icon: '⚡', color: '#818cf8', players: 1500, matches: 1832, sessions: 1700, playTimeHours: 460, formattedPlayTime: '4h 36m', avgSession: '18m', trend: 'up' },
+    { id: 'darts', name: 'Darts Championship', icon: '🎯', color: '#2dd4bf', players: 1200, matches: 1421, sessions: 1350, playTimeHours: 390, formattedPlayTime: '3h 54m', avgSession: '16m', trend: 'same' },
+    { id: 'pingpong', name: 'Table Tennis', icon: '🏓', color: '#38bdf8', players: 1100, matches: 1203, sessions: 1150, playTimeHours: 335, formattedPlayTime: '3h 21m', avgSession: '14m', trend: 'same' },
+    { id: 'gomoku', name: 'Gomoku', icon: '⚫', color: '#94a3b8', players: 990, matches: 1021, sessions: 980, playTimeHours: 280, formattedPlayTime: '2h 48m', avgSession: '12m', trend: 'up' },
+    { id: 'reversi', name: 'Reversi', icon: '⚪', color: '#64748b', players: 842, matches: 910, sessions: 850, playTimeHours: 240, formattedPlayTime: '2h 20m', avgSession: '11m', trend: 'same' },
+    { id: 'connect4', name: 'Connect Four', icon: '🟡', color: '#06b6d4', players: 721, matches: 840, sessions: 790, playTimeHours: 195, formattedPlayTime: '1h 55m', avgSession: '10m', trend: 'up' },
+    { id: 'ultimatetictactoe', name: 'Ultimate Tic-Tac-Toe', icon: '❌', color: '#ef4444', players: 612, matches: 720, sessions: 670, playTimeHours: 160, formattedPlayTime: '1h 35m', avgSession: '9m', trend: 'same' },
+    { id: 'hearts', name: 'Hearts', icon: '♥', color: '#fb7185', players: 543, matches: 610, sessions: 580, playTimeHours: 145, formattedPlayTime: '1h 22m', avgSession: '15m', trend: 'up' },
+    { id: 'ginrummy', name: 'Gin Rummy', icon: '🎴', color: '#f59e0b', players: 421, matches: 490, sessions: 460, playTimeHours: 115, formattedPlayTime: '1h 05m', avgSession: '14m', trend: 'same' },
+    { id: 'duochess', name: 'Duo Chess', icon: '⚔️', color: '#a855f7', players: 368, matches: 450, sessions: 420, playTimeHours: 98, formattedPlayTime: '0h 58m', avgSession: '20m', trend: 'up' },
+  ];
+
+  const liveMatches = [
+    { id: '#M-7842', game: 'Chess', icon: '♔', players: ['ADITYA-OWNER', 'AI (Grandmaster)'], matchType: 'User vs AI', started: 'Apr 28, 14:28', durationSeconds: 252, status: 'In Progress' },
+    { id: '#M-7839', game: 'Duo Chess', icon: '⚔️', players: ['GamingPro', 'ChessMaster'], matchType: 'Player vs Player', started: 'Apr 28, 14:26', durationSeconds: 405, status: 'In Progress' },
+    { id: '#M-7836', game: 'Ludo', icon: '🎯', players: ['LudoQueen', 'Guest_4920'], matchType: 'Pass & Play', started: 'Apr 28, 14:22', durationSeconds: 603, status: 'In Progress' },
+    { id: '#M-7831', game: 'Checkers', icon: '👑', players: ['CrownMaster', 'Riya_001'], matchType: 'Online Match', started: 'Apr 28, 14:18', durationSeconds: 867, status: 'In Progress' },
+    { id: '#M-7828', game: 'Snakes & Ladders', icon: '🐍', players: ['Arjun', 'DevKumar'], matchType: 'Pass & Play', started: 'Apr 28, 14:12', durationSeconds: 1276, status: 'In Progress' },
+    { id: '#M-7824', game: 'Backgammon', icon: '🎲', players: ['PipMaster', 'TacticsQueen'], matchType: 'Online Match', started: 'Apr 28, 14:08', durationSeconds: 1534, status: 'In Progress' },
+  ];
+
+  const userInsights = {
+    newUsersToday: { count: 2487, change: '+25.6%', compareText: 'vs. yesterday' },
+    returningUsersToday: { count: 3924, change: '+14.2%', compareText: 'vs. yesterday' },
+    mostActiveUsers: [
+      { username: 'GamingPro', avatar: '🎮', totalPlayTime: '12h 34m' },
+      { username: 'ChessMaster', avatar: '♟️', totalPlayTime: '10h 21m' },
+      { username: 'LudoQueen', avatar: '🎯', totalPlayTime: '9h 48m' },
+      { username: 'Riya_001', avatar: '🌸', totalPlayTime: '8h 16m' },
+      { username: 'DevKumar', avatar: '⚡', totalPlayTime: '7h 52m' },
+    ],
+    mostCommonGames: [
+      { rank: 1, name: 'Chess', percentage: 22.4, color: '#38bdf8' },
+      { rank: 2, name: 'Ludo', percentage: 14.2, color: '#4ade80' },
+      { rank: 3, name: 'Checkers', percentage: 10.6, color: '#f43f5e' },
+      { rank: 4, name: 'Carrom', percentage: 8.9, color: '#2dd4bf' },
+      { rank: 5, name: 'Snakes & Ladders', percentage: 7.3, color: '#facc15' },
+    ],
+  };
+
+  res.json({
+    success: true,
+    timestamp: new Date().toISOString(),
+    range,
+    kpis,
+    liveUsers,
+    liveActivityFeed,
+    gamesPlayed,
+    liveMatches,
+    userInsights,
+  });
+});
+
 // 2. User Lookup & Governance
 app.post('/api/admin/user/search', (req, res) => {
   const { query } = req.body;
@@ -3874,6 +4201,188 @@ export async function handleDeductGameFee(req: express.Request, res: express.Res
 // Register API Route for atomic fee deductions
 app.post('/api/deduct-fee', handleDeductGameFee);
 app.post('/api/game/deduct-fee', handleDeductGameFee);
+
+// ============================================================================
+// MATCH REWARD & PENALTY SETTLEMENT ENGINE (SERVER-SIDE)
+// ============================================================================
+export interface MatchRewardResult {
+  coinsDelta: number;
+  gemsDelta: number;
+  statusText: string;
+}
+
+export function calculateMatchRewards(rank: number, isWinner: boolean): MatchRewardResult {
+  // If the player lost the match entirely
+  if (!isWinner) {
+    return {
+      coinsDelta: -50000,
+      gemsDelta: -50000,
+      statusText: 'Defeat: 50,000 coins & 50,000 gems deducted.',
+    };
+  }
+
+  // Win positions
+  switch (rank) {
+    case 1:
+      return { coinsDelta: 50000, gemsDelta: 5000, statusText: '1st Place! +50,000 coins, +5,000 gems' };
+    case 2:
+      return { coinsDelta: 20000, gemsDelta: 2000, statusText: '2nd Place! +20,000 coins, +2,000 gems' };
+    case 3:
+      return { coinsDelta: 10000, gemsDelta: 1000, statusText: '3rd Place! +10,000 coins, +1,000 gems' };
+    case 4:
+      return { coinsDelta: 5000, gemsDelta: 500, statusText: '4th Place! +5,000 coins, +500 gems' };
+    default:
+      // 5th position or lower
+      return {
+        coinsDelta: -10000,
+        gemsDelta: -50000,
+        statusText: '5th Place or lower: 10,000 coins & 50,000 gems deducted.',
+      };
+  }
+}
+
+export async function applyMatchSettlement(
+  userId: string,
+  rank: number,
+  isWinner: boolean,
+  gameId: string = 'match'
+) {
+  const settlement = calculateMatchRewards(rank, isWinner);
+
+  // Lookup in-memory or database user
+  let targetUser = usersById.get(userId) || usersByUsername.get(userId) || usersByToken.get(userId);
+  let currentCoins = targetUser?.coins ?? 10000;
+  let currentGems = targetUser?.gems ?? 10000;
+
+  // If Firebase Firestore admin is available, update safely
+  if (adminDb && userId && !userId.startsWith('guest_')) {
+    try {
+      const userRef = adminDb.collection('users').doc(userId);
+      const userDoc = await userRef.get();
+      if (userDoc.exists) {
+        const udata = userDoc.data() || {};
+        if (typeof udata.coins === 'number') currentCoins = udata.coins;
+        if (typeof udata.gems === 'number') currentGems = udata.gems;
+      }
+
+      const updatedCoins = Math.max(0, currentCoins + settlement.coinsDelta);
+      const updatedGems = Math.max(0, currentGems + settlement.gemsDelta);
+
+      await userRef.set(
+        {
+          coins: updatedCoins,
+          gems: updatedGems,
+          stats: {
+            totalMatchesSettled: FieldValue.increment(1),
+            ...(isWinner ? { totalWins: FieldValue.increment(1) } : { totalLosses: FieldValue.increment(1) }),
+            ...(rank === 1 ? { championshipsWon: FieldValue.increment(1) } : {}),
+          },
+          lastSettlement: {
+            rank,
+            isWinner,
+            gameId,
+            ...settlement,
+            timestamp: new Date().toISOString(),
+          },
+        },
+        { merge: true }
+      );
+
+      currentCoins = updatedCoins;
+      currentGems = updatedGems;
+    } catch (dbErr) {
+      console.warn('[Server Settlement DB Warning]:', dbErr);
+      currentCoins = Math.max(0, currentCoins + settlement.coinsDelta);
+      currentGems = Math.max(0, currentGems + settlement.gemsDelta);
+    }
+  } else {
+    currentCoins = Math.max(0, currentCoins + settlement.coinsDelta);
+    currentGems = Math.max(0, currentGems + settlement.gemsDelta);
+  }
+
+  // Update memory user
+  if (targetUser) {
+    targetUser.coins = currentCoins;
+    targetUser.gems = currentGems;
+    savePersistentUsers();
+  }
+
+  const payload = {
+    userId,
+    rank,
+    isWinner,
+    gameId,
+    ...settlement,
+    newBalance: { coins: currentCoins, gems: currentGems },
+    timestamp: Date.now(),
+  };
+
+  // Send summary notification to the player
+  io.to(userId).emit('match:settlement', payload);
+  if (targetUser?.token) {
+    io.to(targetUser.token).emit('match:settlement', payload);
+  }
+  if (targetUser?.username) {
+    io.to(targetUser.username).emit('match:settlement', payload);
+  }
+  io.emit('user:balance_updated', {
+    userId,
+    coins: currentCoins,
+    gems: currentGems,
+  });
+
+  // If 1st place win is secured, broadcast celebratory notice and trigger achievement alert
+  if (rank === 1 && isWinner) {
+    io.emit('chat:system_broadcast', {
+      id: `sys_win_${Date.now()}`,
+      sender: 'System Champion Announcer',
+      text: `🏆 ${targetUser?.username || userId} secured 1st Place in ${gameId}! Awarded +50,000 Coins & +5,000 Gems!`,
+      type: 'trophy',
+      timestamp: Date.now(),
+    });
+  }
+
+  return payload;
+}
+
+// POST Match Settlement API endpoints
+app.post('/api/match/settle', async (req, res) => {
+  try {
+    const { userId, rank = 1, isWinner = true, gameId = 'match' } = req.body;
+    let targetUid = userId;
+    if (!targetUid && req.headers.authorization?.startsWith('Bearer ')) {
+      const authHeaderToken = req.headers.authorization.split(' ')[1];
+      const found = usersByToken.get(authHeaderToken);
+      if (found) targetUid = found.id;
+    }
+    if (!targetUid) {
+      targetUid = 'guest_' + Math.floor(1000 + Math.random() * 9000);
+    }
+    const result = await applyMatchSettlement(targetUid, Number(rank), Boolean(isWinner), String(gameId));
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Settlement failed' });
+  }
+});
+
+app.post('/api/match/settlement', async (req, res) => {
+  try {
+    const { userId, rank = 1, isWinner = true, gameId = 'match' } = req.body;
+    let targetUid = userId;
+    if (!targetUid && req.headers.authorization?.startsWith('Bearer ')) {
+      const authHeaderToken = req.headers.authorization.split(' ')[1];
+      const found = usersByToken.get(authHeaderToken);
+      if (found) targetUid = found.id;
+    }
+    if (!targetUid) {
+      targetUid = 'guest_' + Math.floor(1000 + Math.random() * 9000);
+    }
+    const result = await applyMatchSettlement(targetUid, Number(rank), Boolean(isWinner), String(gameId));
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Settlement failed' });
+  }
+});
 
 // GET Game Entry Fee Matrix
 app.get('/api/game/entry-fees', (req, res) => {
@@ -4870,11 +5379,28 @@ io.on('connection', (socket: Socket) => {
     } else {
       currentUser = getOrCreateGuestSession(data?.token).user;
     }
+    socket.join(currentUser.id);
+    socket.join(currentUser.token);
+    socket.join(currentUser.username);
     socket.emit('auth:success', {
       username: currentUser.username,
       token: currentUser.token,
       isGuest: currentUser.isGuest,
     });
+  });
+
+  // Client match settlement socket listener
+  socket.on('match:settle', async (data: { rank?: number; isWinner?: boolean; gameId?: string; userId?: string }) => {
+    try {
+      const targetUid = data?.userId || currentUser?.id || currentUser?.username || 'guest';
+      const rank = typeof data?.rank === 'number' ? data.rank : 1;
+      const isWinner = data?.isWinner !== undefined ? Boolean(data.isWinner) : true;
+      const gameId = data?.gameId || 'match';
+      const result = await applyMatchSettlement(targetUid, rank, isWinner, gameId);
+      socket.emit('match:settlement', result);
+    } catch (err: any) {
+      console.error('[Socket match:settle error]:', err);
+    }
   });
 
   // --- Lobby & Wheel of Luck Socket Handlers ---
@@ -5263,6 +5789,20 @@ io.on('connection', (socket: Socket) => {
 
       finishedGames.push(matchRecord);
       broadcastLeaderboardUpdate();
+
+      // Execute automatic match reward & penalty settlement for both players
+      const whiteUser = usersByToken.get(room.whiteToken);
+      const blackUser = usersByToken.get(room.blackToken);
+      const activeGameType = room.gameType || 'chess';
+
+      if (data.winner === 'w') {
+        if (whiteUser) applyMatchSettlement(whiteUser.id, 1, true, activeGameType);
+        if (blackUser) applyMatchSettlement(blackUser.id, 2, false, activeGameType);
+      } else if (data.winner === 'b') {
+        if (blackUser) applyMatchSettlement(blackUser.id, 1, true, activeGameType);
+        if (whiteUser) applyMatchSettlement(whiteUser.id, 2, false, activeGameType);
+      }
+
       io.to(data.roomId).emit('game:ended', {
         winner: data.winner,
         reason: data.reason,
@@ -5296,6 +5836,20 @@ io.on('connection', (socket: Socket) => {
     };
 
     finishedGames.push(matchRecord);
+
+    // Execute automatic match reward & penalty settlement for resignation
+    const whiteUser = usersByToken.get(room.whiteToken);
+    const blackUser = usersByToken.get(room.blackToken);
+    const activeGameType = room.gameType || 'chess';
+
+    if (isWhiteResigning) {
+      if (whiteUser) applyMatchSettlement(whiteUser.id, 2, false, activeGameType);
+      if (blackUser) applyMatchSettlement(blackUser.id, 1, true, activeGameType);
+    } else {
+      if (blackUser) applyMatchSettlement(blackUser.id, 2, false, activeGameType);
+      if (whiteUser) applyMatchSettlement(whiteUser.id, 1, true, activeGameType);
+    }
+
     io.to(data.roomId).emit('game:ended', {
       winner,
       reason: 'resignation',

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Trophy, ChevronRight, History, CheckCircle2 } from 'lucide-react';
+import { Trophy, ChevronRight, History, CheckCircle2, Sparkles, Gift } from 'lucide-react';
 import { UserSession } from '../types';
+import { getLeaderboardPayout, formatPayout } from '../utils/leaderboardRewards';
 
 interface LeaderboardAndRecentMatchesProps {
   currentUser: UserSession | null;
@@ -16,11 +17,11 @@ export const LeaderboardAndRecentMatches: React.FC<LeaderboardAndRecentMatchesPr
   const currentUsername = currentUser?.username || 'Aditya-Owner';
 
   const sampleLeaderboard = [
-    { rank: 1, name: 'Aditya-Owner', score: 2650, isCrown: true, isOwner: true },
-    { rank: 2, name: 'Guest_0123', score: 1890, isCrown: false },
-    { rank: 3, name: 'Player_456', score: 1550, isCrown: false },
-    { rank: 4, name: 'Gamer_789', score: 1230, isCrown: false },
-    { rank: 5, name: 'Chess_Pro', score: 1100, isCrown: false },
+    { rank: 1, name: 'Aditya-Owner', score: 2650, isCrown: true, isOwner: true, reward: getLeaderboardPayout(1) },
+    { rank: 2, name: 'Grandmaster_Alex', score: 2150, isCrown: false, reward: getLeaderboardPayout(2) },
+    { rank: 3, name: 'TacticsQueen', score: 1820, isCrown: false, reward: getLeaderboardPayout(3) },
+    { rank: 4, name: 'LudoEmperor', score: 1650, isCrown: false, reward: getLeaderboardPayout(4) },
+    { rank: 5, name: 'StrikerLegend_Raj', score: 1510, isCrown: false, reward: getLeaderboardPayout(5) },
   ];
 
   const sampleRecentMatches = [
@@ -84,12 +85,25 @@ export const LeaderboardAndRecentMatches: React.FC<LeaderboardAndRecentMatchesPr
                   </div>
                 </div>
 
-                <div className="font-mono font-black text-xs text-amber-400">
-                  {player.score.toLocaleString()}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300">
+                    +{formatPayout(player.reward)} 🪙💎
+                  </span>
+                  <div className="font-mono font-black text-xs text-sky-400">
+                    {player.score.toLocaleString()}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
+          <button
+            onClick={onOpenLeaderboard}
+            className="mt-3 w-full py-1.5 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+          >
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span>View Complete Top 1-150 Leaderboard & Rewards Table</span>
+            <ChevronRight className="w-3 h-3" />
+          </button>
         </div>
       </div>
 

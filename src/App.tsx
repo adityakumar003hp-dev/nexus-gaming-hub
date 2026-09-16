@@ -65,6 +65,7 @@ import { DailyWheelModal } from './components/DailyWheelModal';
 import { CoinHistoryModal } from './components/CoinHistoryModal';
 import { CurrencyExchangeModal } from './components/CurrencyExchangeModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
+import { AdminAnalyticsDashboard } from './components/AdminAnalyticsDashboard';
 import { EmergencyLockdownOverlay } from './components/EmergencyLockdownOverlay';
 import { moderateChatMessage } from './utils/chatModerator';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -271,6 +272,7 @@ export default function App() {
   const [isFriendsModalOpen, setIsFriendsModalOpen] = useState<boolean>(false);
   const [isRankedLadderOpen, setIsRankedLadderOpen] = useState<boolean>(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
+  const [isAdminAnalyticsOpen, setIsAdminAnalyticsOpen] = useState<boolean>(false);
   const [isOwnerVerifyOpen, setIsOwnerVerifyOpen] = useState<boolean>(false);
   const [exchangeDirection, setExchangeDirection] = useState<'gemToCoin' | 'coinToGem'>('gemToCoin');
   const [hatrickNotification, setHatrickNotification] = useState<{ show: boolean; reward: number; streak: number } | null>(null);
@@ -491,9 +493,11 @@ export default function App() {
     window.addEventListener('chess_streak_updated', handleStreakUpdated);
 
     (window as any).openMatchmakingModal = () => setIsMatchmakingOpen(true);
+    (window as any).openAdminAnalytics = () => setIsAdminAnalyticsOpen(true);
 
     return () => {
       delete (window as any).openMatchmakingModal;
+      delete (window as any).openAdminAnalytics;
       window.removeEventListener('token_compromised_alert', handleCompromiseAlert);
       window.removeEventListener('chess_hatrick_achieved', handleHatrickAchieved);
       window.removeEventListener('chess_points_updated', handlePointsUpdated);
@@ -1535,12 +1539,18 @@ export default function App() {
 
       {/* Top Banner: Made in India & Owner Badge */}
       <div className="w-full bg-[#0a0806]/95 border-b border-[#f3ce6b]/40 py-2 px-4 text-center flex flex-col items-center justify-center gap-1.5 z-40 relative shadow-md">
-        {/* Top: Made in India with India Flag */}
+        {/* Top: Made in India with India Flag - Click to open Admin Analytics Dashboard */}
         <div className="flex items-center justify-center gap-2">
-          {/* India Flag Vector Badge */}
-          <span className="inline-flex items-center gap-1.5 bg-gradient-to-r from-orange-950/70 via-stone-900/90 to-emerald-950/70 border border-orange-500/40 px-3 py-0.5 rounded-full shadow-md backdrop-blur-md">
+          {/* India Flag Vector Badge Button */}
+          <button
+            type="button"
+            onClick={() => setIsAdminAnalyticsOpen(true)}
+            id="top-banner-made-in-india-btn"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-950/80 via-stone-900/90 to-emerald-950/80 border border-orange-500/50 hover:border-orange-400 px-3.5 py-1 rounded-full shadow-md hover:shadow-orange-500/20 backdrop-blur-md cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group"
+            title="Click to open Duo Chess Arena Admin Analytics Dashboard"
+          >
             <svg
-              className="w-5 h-3.5 rounded-[2px] shadow-sm overflow-hidden shrink-0 border border-white/20"
+              className="w-5 h-3.5 rounded-[2px] shadow-sm overflow-hidden shrink-0 border border-white/20 group-hover:scale-105 transition-transform"
               viewBox="0 0 900 600"
               aria-label="Flag of India"
             >
@@ -1563,10 +1573,14 @@ export default function App() {
                 ))}
               </g>
             </svg>
-            <span className="text-[11px] sm:text-xs font-black tracking-wider uppercase bg-gradient-to-r from-orange-400 via-stone-100 to-emerald-400 bg-clip-text text-transparent">
+            <span className="text-[11px] sm:text-xs font-black tracking-wider uppercase bg-gradient-to-r from-orange-400 via-stone-100 to-emerald-400 bg-clip-text text-transparent group-hover:from-orange-300 group-hover:to-emerald-300">
               Made in India
             </span>
-          </span>
+            <span className="text-[9px] font-bold bg-sky-500/20 border border-sky-400/30 text-sky-300 px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline-flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Admin Analytics
+            </span>
+          </button>
         </div>
 
         {/* Below: Owner: Aditya - Click to open Owner Verification */}
@@ -3100,6 +3114,13 @@ export default function App() {
         isOpen={isAdminPanelOpen}
         onClose={() => setIsAdminPanelOpen(false)}
         currentUsername={currentUser?.username}
+      />
+
+      {/* Duo Chess Arena Admin Analytics Dashboard */}
+      <AdminAnalyticsDashboard
+        isOpen={isAdminAnalyticsOpen}
+        onClose={() => setIsAdminAnalyticsOpen(false)}
+        currentUser={currentUser}
       />
 
       {/* Cosmetics & Theme Emporium Modal */}
