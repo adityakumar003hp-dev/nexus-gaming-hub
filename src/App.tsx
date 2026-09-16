@@ -274,8 +274,29 @@ export default function App() {
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
   const [isAdminAnalyticsOpen, setIsAdminAnalyticsOpen] = useState<boolean>(false);
   const [isOwnerVerifyOpen, setIsOwnerVerifyOpen] = useState<boolean>(false);
+  const [ownerVerifyTarget, setOwnerVerifyTarget] = useState<'panel' | 'analytics'>('panel');
   const [exchangeDirection, setExchangeDirection] = useState<'gemToCoin' | 'coinToGem'>('gemToCoin');
   const [hatrickNotification, setHatrickNotification] = useState<{ show: boolean; reward: number; streak: number } | null>(null);
+
+  const handleOpenAdminPanel = () => {
+    const isVerified = typeof window !== 'undefined' && sessionStorage.getItem('chess_owner_verified') === 'true';
+    if (isVerified) {
+      setIsAdminPanelOpen(true);
+    } else {
+      setOwnerVerifyTarget('panel');
+      setIsOwnerVerifyOpen(true);
+    }
+  };
+
+  const handleOpenAdminAnalytics = () => {
+    const isVerified = typeof window !== 'undefined' && sessionStorage.getItem('chess_owner_verified') === 'true';
+    if (isVerified) {
+      setIsAdminAnalyticsOpen(true);
+    } else {
+      setOwnerVerifyTarget('analytics');
+      setIsOwnerVerifyOpen(true);
+    }
+  };
 
   // Emergency Mode Lockdown State (Firestore system/governance & platform_state/lockdown)
   const [emergencyLockdown, setEmergencyLockdown] = useState<{
@@ -493,11 +514,18 @@ export default function App() {
     window.addEventListener('chess_streak_updated', handleStreakUpdated);
 
     (window as any).openMatchmakingModal = () => setIsMatchmakingOpen(true);
-    (window as any).openAdminAnalytics = () => setIsAdminAnalyticsOpen(true);
+    (window as any).openAdminAnalytics = handleOpenAdminAnalytics;
+    (window as any).openAdminPanel = handleOpenAdminPanel;
+    (window as any).openOwnerVerificationModal = (target: 'panel' | 'analytics' = 'panel') => {
+      setOwnerVerifyTarget(target);
+      setIsOwnerVerifyOpen(true);
+    };
 
     return () => {
       delete (window as any).openMatchmakingModal;
       delete (window as any).openAdminAnalytics;
+      delete (window as any).openAdminPanel;
+      delete (window as any).openOwnerVerificationModal;
       window.removeEventListener('token_compromised_alert', handleCompromiseAlert);
       window.removeEventListener('chess_hatrick_achieved', handleHatrickAchieved);
       window.removeEventListener('chess_points_updated', handlePointsUpdated);
@@ -1544,10 +1572,10 @@ export default function App() {
           {/* India Flag Vector Badge Button */}
           <button
             type="button"
-            onClick={() => setIsAdminAnalyticsOpen(true)}
+            onClick={handleOpenAdminAnalytics}
             id="top-banner-made-in-india-btn"
             className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-950/80 via-stone-900/90 to-emerald-950/80 border border-orange-500/50 hover:border-orange-400 px-3.5 py-1 rounded-full shadow-md hover:shadow-orange-500/20 backdrop-blur-md cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group"
-            title="Click to open Duo Chess Arena Admin Analytics Dashboard"
+            title="Click to authenticate and open Duo Chess Arena Admin Analytics Dashboard"
           >
             <svg
               className="w-5 h-3.5 rounded-[2px] shadow-sm overflow-hidden shrink-0 border border-white/20 group-hover:scale-105 transition-transform"
@@ -1587,12 +1615,7 @@ export default function App() {
         <div className="flex items-center justify-center">
           <button
             type="button"
-            onClick={() => {
-              if ((window as any).OwnerAuthModal?.open) {
-                (window as any).OwnerAuthModal.open();
-              }
-              setIsOwnerVerifyOpen(true);
-            }}
+            onClick={handleOpenAdminPanel}
             id="top-banner-owner-btn"
             className="owner-pill-btn group cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-1.5 px-4 py-1 rounded-full bg-[#14100c]/90 border border-[#f3ce6b]/60 hover:border-amber-300 text-[#ffe89e] shadow-lg shadow-[#f3ce6b]/20 hover:shadow-amber-500/40 backdrop-blur-md"
             title="Click to authenticate as Site Owner ADITYA and open Command Center"
@@ -1650,7 +1673,7 @@ export default function App() {
           setExchangeDirection(dir || 'gemToCoin');
           setIsExchangeModalOpen(true);
         }}
-        onOpenAdminPanel={() => setIsOwnerVerifyOpen(true)}
+        onOpenAdminPanel={handleOpenAdminPanel}
         onOpenPuzzles={() => setIsPuzzleOpen(true)}
         onOpenPositionEditor={() => setIsPositionEditorOpen(true)}
         onOpenCustomSandbox={() => setIsCustomSandboxOpen(true)}
@@ -1685,7 +1708,7 @@ export default function App() {
           onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
           onOpenMatchmaking={() => setIsMatchmakingOpen(true)}
           onOpenTournaments={() => setIsTournamentOpen(true)}
-          onOpenAdminPanel={() => setIsOwnerVerifyOpen(true)}
+          onOpenAdminPanel={handleOpenAdminPanel}
         />
 
         {/* 20 Games Category Bar Selector */}
@@ -3102,10 +3125,15 @@ export default function App() {
       {/* Site Owner Authentication & Verification Modal */}
       <OwnerVerificationModal
         isOpen={isOwnerVerifyOpen}
+        targetTitle={ownerVerifyTarget === 'analytics' ? 'Admin Analytics Dashboard' : 'Command & Control Admin Panel'}
         onClose={() => setIsOwnerVerifyOpen(false)}
         onSuccess={() => {
           setIsOwnerVerifyOpen(false);
-          setIsAdminPanelOpen(true);
+          if (ownerVerifyTarget === 'analytics') {
+            setIsAdminAnalyticsOpen(true);
+          } else {
+            setIsAdminPanelOpen(true);
+          }
         }}
       />
 

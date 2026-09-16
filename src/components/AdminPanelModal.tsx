@@ -99,6 +99,27 @@ export interface AdminClan {
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose, currentUsername }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'economy' | 'chat' | 'tournaments' | 'clans' | 'system' | 'audit' | 'referee'>('overview');
 
+  // Verify owner authentication when opened
+  useEffect(() => {
+    if (isOpen) {
+      const isVerified = sessionStorage.getItem('chess_owner_verified') === 'true';
+      if (!isVerified) {
+        onClose();
+        if ((window as any).openOwnerVerificationModal) {
+          (window as any).openOwnerVerificationModal('panel');
+        }
+      }
+    }
+  }, [isOpen, onClose]);
+
+  const handleLockSession = () => {
+    sessionStorage.removeItem('chess_owner_verified');
+    sessionStorage.removeItem('chess_admin_token');
+    localStorage.removeItem('chess_owner_verified');
+    soundFx.playClick();
+    onClose();
+  };
+
   // Referee & Audit Log State
   const [auditLogs, setAuditLogs] = useState<Array<{ id: string; timestamp: string; actor: string; action: string; category: string; severity: 'info' | 'warning' | 'critical' }>>([
     { id: 'log_1', timestamp: '2 mins ago', actor: 'ADITYA-OWNER', action: 'Universal Firestore sync initialized for all active player sessions', category: 'SYSTEM', severity: 'info' },
@@ -653,6 +674,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Admin Analytics</span>
+            </button>
+
+            <button
+              onClick={handleLockSession}
+              className="px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-300 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+              title="Lock owner authentication session and exit"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Lock Session</span>
             </button>
 
             <button

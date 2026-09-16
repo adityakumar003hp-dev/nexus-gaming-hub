@@ -88,6 +88,7 @@ interface User {
   accumulatedGameTimeSeconds?: number;
   coins?: number;
   gems?: number;
+  claimedLeaderboardRanks?: number[];
 }
 
 interface MatchRecord {
@@ -118,6 +119,7 @@ interface ChatMessage {
 
 interface PvPRoom {
   roomId: string;
+  createdAt?: number;
   title?: string;
   gameId?: string;
   gameType?: string;
@@ -150,6 +152,85 @@ const usersByUsername = new Map<string, User>();
 const finishedGames: MatchRecord[] = [];
 const roomChats = new Map<string, ChatMessage[]>();
 const pvpRooms = new Map<string, PvPRoom>();
+
+// Global Leaderboard One-Time Claim Registry (maps userId/username to Set of claimed rank numbers)
+const globalUserClaimedRanksMap = new Map<string, Set<number>>();
+
+// Real-Time Platform Activity Logging & Real-Time Event Bus
+interface PlatformActivityItem {
+  id: string;
+  user: string;
+  action: string;
+  game: string | null;
+  timeAgo: string;
+  timestamp: number;
+  type: string;
+}
+
+const realPlatformActivityFeed: PlatformActivityItem[] = [
+  {
+    id: 'act_init_1',
+    user: 'ADITYA-OWNER',
+    action: 'initialized platform server & real-time telemetry engine',
+    game: 'System',
+    timeAgo: 'Just now',
+    timestamp: Date.now() - 30000,
+    type: 'system',
+  },
+];
+
+function addRealPlatformActivity(user: string, action: string, game: string | null, type: string) {
+  const item: PlatformActivityItem = {
+    id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    user,
+    action,
+    game,
+    timeAgo: 'Just now',
+    timestamp: Date.now(),
+    type,
+  };
+  realPlatformActivityFeed.unshift(item);
+  if (realPlatformActivityFeed.length > 60) {
+    realPlatformActivityFeed.pop();
+  }
+  if (typeof io !== 'undefined' && io) {
+    io.emit('admin:activity', item);
+  }
+}
+
+interface GameMeta {
+  id: string;
+  name: string;
+  icon: string;
+  color?: string;
+}
+
+const ALL_GAMES_METADATA: GameMeta[] = [
+  { id: 'chess', name: 'Chess', icon: '♟️', color: '#38bdf8' },
+  { id: 'checkers', name: 'Draughts (Checkers)', icon: '⚪', color: '#f43f5e' },
+  { id: 'carrom', name: 'Carrom Board Arena', icon: '🥏', color: '#2dd4bf' },
+  { id: 'ludo', name: 'Ludo', icon: '🎯', color: '#4ade80' },
+  { id: 'snakes', name: 'Snakes & Ladders', icon: '🐍', color: '#facc15' },
+  { id: 'backgammon', name: 'Backgammon', icon: '🎲', color: '#c084fc' },
+  { id: 'speed', name: 'Speed (Spit)', icon: '⚡', color: '#818cf8' },
+  { id: 'darts', name: 'Darts Championship', icon: '🎯', color: '#2dd4bf' },
+  { id: 'pingpong', name: 'Table Tennis', icon: '🏓', color: '#38bdf8' },
+  { id: 'gomoku', name: 'Gomoku (Five in a Row)', icon: '⚫', color: '#94a3b8' },
+  { id: 'reversi', name: 'Reversi (Othello)', icon: '☯️', color: '#64748b' },
+  { id: 'connect4', name: 'Connect Four', icon: '🟡', color: '#06b6d4' },
+  { id: 'ultimatetictactoe', name: 'Ultimate Tic-Tac-Toe', icon: '❌', color: '#ef4444' },
+  { id: 'hearts', name: 'Hearts', icon: '♥️', color: '#fb7185' },
+  { id: 'ginrummy', name: 'Gin Rummy', icon: '🎴', color: '#f59e0b' },
+  { id: 'duochess', name: 'Duo Chess', icon: '⚔️', color: '#a855f7' },
+  { id: 'whist', name: 'Whist', icon: '🃏', color: '#10b981' },
+  { id: 'dotsandboxes', name: 'Dots and Boxes', icon: '📦', color: '#eab308' },
+  { id: 'battleship', name: 'Battleship', icon: '🚢', color: '#0ea5e9' },
+  { id: 'sim', name: 'Sim (Triangle Game)', icon: '🔺', color: '#f43f5e' },
+  { id: 'uno', name: 'Uno (Crazy Eights)', icon: '🃏', color: '#e11d48' },
+  { id: 'findthenumber', name: 'Find the Number (Hand Speed)', icon: '🖐️', color: '#10b981' },
+  { id: 'cribbage', name: 'Cribbage', icon: '🪵', color: '#8b5cf6' },
+  { id: 'mancala', name: 'Mancala', icon: '🪨', color: '#06b6d4' },
+];
 
 // User Location Violation Tracker & Progressive Mute Policy (Strikes 1, 2, and 3)
 const locationViolationsByUser = new Map<string, { count: number; mutedUntil: number }>();
@@ -256,6 +337,11 @@ async function loadPersistentData() {
           usersByToken.set(u.token, u);
           if (u.email) usersByEmail.set(u.email.toLowerCase(), u);
           if (u.username) usersByUsername.set(u.username.toLowerCase(), u);
+          if (Array.isArray(u.claimedLeaderboardRanks) && u.claimedLeaderboardRanks.length > 0) {
+            const ranksSet = new Set<number>(u.claimedLeaderboardRanks);
+            globalUserClaimedRanksMap.set(u.id.toLowerCase(), ranksSet);
+            if (u.username) globalUserClaimedRanksMap.set(u.username.toLowerCase(), ranksSet);
+          }
         });
       }
     }
@@ -1613,28 +1699,6 @@ app.post('/api/sql/sync', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// 16 Games Catalog Metadata for Global Telemetry and Profiles
-const ALL_GAMES_METADATA: { id: string; name: string; icon: string }[] = [
-  { id: 'chess', name: 'Chess', icon: '♟️' },
-  { id: 'checkers', name: 'Draughts (Checkers)', icon: '⚪' },
-  { id: 'backgammon', name: 'Backgammon', icon: '🎲' },
-  { id: 'ludo', name: 'Ludo', icon: '🎯' },
-  { id: 'snakes', name: 'Snakes & Ladders', icon: '🐍' },
-  { id: 'gomoku', name: 'Gomoku (Five in a Row)', icon: '⚫' },
-  { id: 'reversi', name: 'Reversi (Othello)', icon: '☯️' },
-  { id: 'connect4', name: 'Connect Four', icon: '🟡' },
-  { id: 'ultimatetictactoe', name: 'Ultimate Tic-Tac-Toe', icon: '❌' },
-  { id: 'dotsandboxes', name: 'Dots and Boxes', icon: '📦' },
-  { id: 'battleship', name: 'Battleship', icon: '🚢' },
-  { id: 'sim', name: 'Sim (Triangle Game)', icon: '🔺' },
-  { id: 'uno', name: 'Uno (Crazy Eights)', icon: '🃏' },
-  { id: 'hearts', name: 'Hearts', icon: '♥️' },
-  { id: 'ginrummy', name: 'Gin Rummy', icon: '🎴' },
-  { id: 'speed', name: 'Speed (Spit)', icon: '⚡' },
-  { id: 'findthenumber', name: 'Find the Number (Hand Speed)', icon: '🖐️' },
-  { id: 'carrom', name: 'Carrom Board Arena', icon: '🥏' },
-];
-
 function computeUserGameStats(user: User | null, username: string, requestedGame: string = 'all') {
   const reqGame = (requestedGame || 'all').toLowerCase();
 
@@ -2204,15 +2268,59 @@ app.post('/api/leaderboard/claim-reward', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Rank must be between 1 and 150' });
     }
 
+    // Find user record
+    let targetUser = usersById.get(targetUid) || usersByUsername.get(targetUid) || usersByToken.get(targetUid);
+    if (!targetUser) {
+      for (const u of usersByUsername.values()) {
+        if (u.username.toLowerCase() === String(targetUid).toLowerCase()) {
+          targetUser = u;
+          break;
+        }
+      }
+    }
+
+    const userKey = (targetUser?.id || targetUser?.username || targetUid).toLowerCase();
+    const existingClaims = globalUserClaimedRanksMap.get(userKey) || new Set<number>();
+    if (targetUser?.claimedLeaderboardRanks) {
+      for (const r of targetUser.claimedLeaderboardRanks) existingClaims.add(Number(r));
+    }
+
+    // Check Firestore if available
+    if (adminDb && targetUid && !targetUid.startsWith('guest_')) {
+      try {
+        const userDoc = await adminDb.collection('users').doc(targetUid).get();
+        if (userDoc.exists) {
+          const udata = userDoc.data() || {};
+          if (Array.isArray(udata.claimedLeaderboardRanks)) {
+            for (const r of udata.claimedLeaderboardRanks) existingClaims.add(Number(r));
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Enforce one-time claim per rank across all ranks and games
+    if (existingClaims.has(rankNum)) {
+      return res.status(400).json({
+        success: false,
+        alreadyClaimed: true,
+        rank: rankNum,
+        claimedRanks: Array.from(existingClaims),
+        error: `Rank #${rankNum} reward has already been claimed! Each user can claim a rank reward only once.`,
+      });
+    }
+
     const payout = getLeaderboardPayout(rankNum);
     if (!payout) {
       return res.status(400).json({ success: false, error: 'No payout found for rank ' + rankNum });
     }
 
     // Award payout in Coins and Gems
-    let targetUser = usersById.get(targetUid) || usersByUsername.get(targetUid) || usersByToken.get(targetUid);
     let currentCoins = targetUser?.coins ?? 10000;
     let currentGems = targetUser?.gems ?? 10000;
+
+    // Add rank to claimed set
+    existingClaims.add(rankNum);
+    globalUserClaimedRanksMap.set(userKey, existingClaims);
 
     if (adminDb && targetUid && !targetUid.startsWith('guest_')) {
       try {
@@ -2231,6 +2339,7 @@ app.post('/api/leaderboard/claim-reward', async (req, res) => {
           {
             coins: updatedCoins,
             gems: updatedGems,
+            claimedLeaderboardRanks: Array.from(existingClaims),
             lastLeaderboardReward: {
               gameType,
               rank: rankNum,
@@ -2256,6 +2365,7 @@ app.post('/api/leaderboard/claim-reward', async (req, res) => {
     if (targetUser) {
       targetUser.coins = currentCoins;
       targetUser.gems = currentGems;
+      targetUser.claimedLeaderboardRanks = Array.from(existingClaims);
       savePersistentUsers();
     }
 
@@ -2265,6 +2375,14 @@ app.post('/api/leaderboard/claim-reward', async (req, res) => {
       coins: currentCoins,
       gems: currentGems,
     });
+
+    // Record Real-Time Platform Activity
+    addRealPlatformActivity(
+      targetUser?.username || targetUid,
+      `claimed Rank #${rankNum} Leaderboard Reward (+${payout.toLocaleString()} Coins & Gems)`,
+      gameType,
+      'reward'
+    );
 
     if (rankNum <= 10) {
       io.emit('chat:system_broadcast', {
@@ -2281,11 +2399,63 @@ app.post('/api/leaderboard/claim-reward', async (req, res) => {
       rank: rankNum,
       gameType,
       payout,
+      claimedRanks: Array.from(existingClaims),
       newBalance: { coins: currentCoins, gems: currentGems },
       message: `Successfully claimed ${payout.toLocaleString()} Coins & ${payout.toLocaleString()} Gems for Rank #${rankNum}!`,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Failed to claim reward' });
+  }
+});
+
+// Endpoint to query claimed ranks for a user
+app.get('/api/leaderboard/claimed-rewards', async (req, res) => {
+  try {
+    let targetUid = (req.query.userId as string) || '';
+    if (!targetUid && req.headers.authorization?.startsWith('Bearer ')) {
+      const authHeaderToken = req.headers.authorization.split(' ')[1];
+      const found = usersByToken.get(authHeaderToken);
+      if (found) targetUid = found.id;
+    }
+    if (!targetUid) {
+      return res.json({ success: true, claimedRanks: [] });
+    }
+
+    let targetUser = usersById.get(targetUid) || usersByUsername.get(targetUid) || usersByToken.get(targetUid);
+    if (!targetUser) {
+      for (const u of usersByUsername.values()) {
+        if (u.username.toLowerCase() === String(targetUid).toLowerCase()) {
+          targetUser = u;
+          break;
+        }
+      }
+    }
+
+    const userKey = (targetUser?.id || targetUser?.username || targetUid).toLowerCase();
+    const claimsSet = new Set<number>(globalUserClaimedRanksMap.get(userKey) || []);
+
+    if (targetUser?.claimedLeaderboardRanks) {
+      for (const r of targetUser.claimedLeaderboardRanks) claimsSet.add(Number(r));
+    }
+
+    if (adminDb && targetUid && !targetUid.startsWith('guest_')) {
+      try {
+        const userDoc = await adminDb.collection('users').doc(targetUid).get();
+        if (userDoc.exists) {
+          const udata = userDoc.data() || {};
+          if (Array.isArray(udata.claimedLeaderboardRanks)) {
+            for (const r of udata.claimedLeaderboardRanks) claimsSet.add(Number(r));
+          }
+        }
+      } catch (e) {}
+    }
+
+    res.json({
+      success: true,
+      claimedRanks: Array.from(claimsSet),
+    });
+  } catch (err: any) {
+    res.json({ success: true, claimedRanks: [] });
   }
 });
 
@@ -3795,91 +3965,219 @@ app.get('/api/admin/overview', (req, res) => {
   });
 });
 
-// Admin Analytics Dashboard Telemetry Endpoint
-app.get('/api/admin/analytics', (req, res) => {
-  const range = (req.query.range as string) || 'today';
-  const multiplier = range === '30days' ? 4.2 : range === '7days' ? 2.1 : 1.0;
+// Function to compute 100% Real-Time Analytics from active platform state
+function calculateRealAnalytics(range: string = 'today') {
+  const now = Date.now();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const startOfToday = new Date(todayStr).getTime();
 
+  // 1. Gather all unique real users
+  const allUsersMap = new Map<string, User>();
+  for (const u of usersById.values()) if (u && u.id) allUsersMap.set(u.id, u);
+  for (const u of usersByUsername.values()) if (u && u.id) allUsersMap.set(u.id, u);
+  for (const u of usersByToken.values()) if (u && u.id) allUsersMap.set(u.id, u);
+  const allUsers = Array.from(allUsersMap.values());
+  const totalUsersCount = Math.max(allUsers.length, 1);
+
+  // Online sockets / clients
+  const clientsCount = (typeof io !== 'undefined' && io && io.engine) ? io.engine.clientsCount : 1;
+  const activeRooms = Array.from(pvpRooms.values()).filter((r) => r.status !== 'finished');
+  const usersInActiveRooms = activeRooms.length * 2;
+  const playingCount = Math.min(clientsCount, Math.max(usersInActiveRooms, 0));
+  const inLobbyCount = Math.max(0, clientsCount - playingCount);
+
+  // Users logged in today
+  let loggedInToday = 0;
+  let newUsersToday = 0;
+  let returningUsers = 0;
+
+  for (const u of allUsers) {
+    const isTodayLogin = u.lastLoginDate === todayStr || (u.createdAt && u.createdAt >= startOfToday);
+    if (isTodayLogin) {
+      loggedInToday++;
+      if (u.createdAt && u.createdAt >= startOfToday) {
+        newUsersToday++;
+      } else {
+        returningUsers++;
+      }
+    }
+  }
+  loggedInToday = Math.max(loggedInToday, 1);
+  if (newUsersToday === 0 && returningUsers === 0) {
+    returningUsers = 1;
+  }
+
+  // Games played today
+  const gamesFinishedToday = finishedGames.filter((g) => {
+    const gTime = g.createdAt || 0;
+    return gTime >= startOfToday;
+  }).length;
+
+  let totalUserGamesCount = 0;
+  for (const u of allUsers) {
+    totalUserGamesCount += (u.gamesOpenedCount || 0);
+  }
+  const totalGamesToday = Math.max(gamesFinishedToday + totalUserGamesCount, finishedGames.length, 1);
+
+  // Average session time calculation
+  let totalSecondsSum = 0;
+  let gamesWithDuration = 0;
+  for (const g of finishedGames) {
+    if (g.durationSeconds && g.durationSeconds > 0) {
+      totalSecondsSum += g.durationSeconds;
+      gamesWithDuration++;
+    }
+  }
+  for (const u of allUsers) {
+    if (u.accumulatedGameTimeSeconds && u.accumulatedGameTimeSeconds > 0) {
+      totalSecondsSum += u.accumulatedGameTimeSeconds;
+      gamesWithDuration++;
+    }
+  }
+  const avgSeconds = gamesWithDuration > 0 ? Math.round(totalSecondsSum / gamesWithDuration) : 420;
+  const avgSessionMins = Math.floor(avgSeconds / 60);
+  const avgSessionSecs = avgSeconds % 60;
+  const avgSessionStr = `${avgSessionMins}m ${String(avgSessionSecs).padStart(2, '0')}s`;
+
+  // KPIs
   const kpis = {
-    totalUsers: { value: Math.round(48732 * (range === 'today' ? 1 : multiplier * 0.9)), change: '+12.5%', period: 'vs. previous 7 days', isPositive: true },
-    dau: { value: Math.round(8421 * (range === 'today' ? 1 : multiplier * 0.8)), change: '+18.7%', period: 'vs. previous 7 days', isPositive: true },
-    usersLoggedInToday: { value: Math.round(12346 * (range === 'today' ? 1 : multiplier)), change: '+22.3%', period: 'vs. previous 7 days', isPositive: true },
-    usersCurrentlyPlaying: { value: 4892, change: '+16.8%', period: 'vs. previous 7 days', isPositive: true },
-    newUsersToday: { value: Math.round(2487 * (range === 'today' ? 1 : multiplier * 0.95)), change: '+25.6%', period: 'vs. previous 7 days', isPositive: true },
-    returningUsers: { value: Math.round(3924 * (range === 'today' ? 1 : multiplier * 1.05)), change: '+14.2%', period: 'vs. previous 7 days', isPositive: true },
-    totalGamesPlayedToday: { value: Math.round(28671 * (range === 'today' ? 1 : multiplier * 1.1)), change: '+20.4%', period: 'vs. previous 7 days', isPositive: true },
-    avgSessionTime: { value: '42m 18s', change: '+8.7%', period: 'vs. previous 7 days', isPositive: true },
+    totalUsers: { value: totalUsersCount, change: '+100%', period: 'active platform registry', isPositive: true },
+    dau: { value: loggedInToday, change: '+100%', period: 'active players today', isPositive: true },
+    usersLoggedInToday: { value: loggedInToday, change: '+100%', period: 'daily active logins', isPositive: true },
+    usersCurrentlyPlaying: { value: playingCount, change: activeRooms.length > 0 ? `+${activeRooms.length} rooms` : '0 active matches', period: 'real-time active sessions', isPositive: playingCount > 0 },
+    newUsersToday: { value: newUsersToday, change: `${newUsersToday} new`, period: 'registered today', isPositive: true },
+    returningUsers: { value: returningUsers, change: `${returningUsers} returning`, period: 'active returning', isPositive: true },
+    totalGamesPlayedToday: { value: totalGamesToday, change: `+${totalGamesToday}`, period: 'matches completed', isPositive: true },
+    avgSessionTime: { value: avgSessionStr, change: `${avgSessionMins}m`, period: 'avg gameplay duration', isPositive: true },
   };
 
+  // Live Users breakdown
   const liveUsers = {
-    currentlyOnline: 7482,
-    playing: 4892,
-    inLobby: 1203,
-    idle: 842,
-    offline: 545,
+    currentlyOnline: clientsCount,
+    playing: playingCount,
+    inLobby: inLobbyCount,
+    idle: 0,
+    offline: Math.max(0, totalUsersCount - clientsCount),
   };
 
-  const liveActivityFeed = [
-    { id: 'act_1', user: 'Rahul_123', action: 'joined the game', game: 'Chess', timeAgo: '2 min ago', type: 'join' },
-    { id: 'act_2', user: 'PriyaSingh', action: 'logged in', game: null, timeAgo: '2 min ago', type: 'login' },
-    { id: 'act_3', user: 'GamingPro', action: 'started Chess', game: 'Chess', timeAgo: '4 min ago', type: 'game_start' },
-    { id: 'act_4', user: 'Suresh_77', action: 'started Ludo', game: 'Ludo', timeAgo: '6 min ago', type: 'game_start' },
-    { id: 'act_5', user: 'Anita', action: 'completed Checkers', game: 'Checkers', timeAgo: '8 min ago', type: 'game_end' },
-    { id: 'act_6', user: 'DevKumar', action: 'left match', game: 'Duo Chess', timeAgo: '10 min ago', type: 'match_leave' },
-    { id: 'act_7', user: 'Riya_001', action: 'logged in', game: null, timeAgo: '12 min ago', type: 'login' },
-    { id: 'act_8', user: 'Arjun', action: 'started Snakes & Ladders', game: 'Snakes & Ladders', timeAgo: '14 min ago', type: 'game_start' },
-    { id: 'act_9', user: 'Vikram_Ace', action: 'won Carrom match', game: 'Carrom', timeAgo: '16 min ago', type: 'game_end' },
-    { id: 'act_10', user: 'Sneha_Empire', action: 'created tournament lobby', game: 'Chess', timeAgo: '18 min ago', type: 'tournament' }
-  ];
+  // Live Activity Feed - computed relative time
+  const liveActivityFeed = realPlatformActivityFeed.map((item) => {
+    const diffSec = Math.floor((now - item.timestamp) / 1000);
+    let timeAgo = 'Just now';
+    if (diffSec < 10) timeAgo = 'Just now';
+    else if (diffSec < 60) timeAgo = `${diffSec}s ago`;
+    else if (diffSec < 3600) timeAgo = `${Math.floor(diffSec / 60)} min ago`;
+    else if (diffSec < 86400) timeAgo = `${Math.floor(diffSec / 3600)} hour ago`;
+    else timeAgo = `${Math.floor(diffSec / 86400)} days ago`;
 
-  const gamesPlayed = [
-    { id: 'chess', name: 'Chess', icon: '♔', color: '#38bdf8', players: 6842, matches: 5213, sessions: 6100, playTimeHours: 1842, formattedPlayTime: '18h 24m', avgSession: '48m', trend: 'up' },
-    { id: 'checkers', name: 'Draughts / Checkers', icon: '👑', color: '#f43f5e', players: 4200, matches: 3221, sessions: 3900, playTimeHours: 970, formattedPlayTime: '9h 42m', avgSession: '32m', trend: 'up' },
-    { id: 'carrom', name: 'Carrom', icon: '🥏', color: '#2dd4bf', players: 2900, matches: 2874, sessions: 2800, playTimeHours: 735, formattedPlayTime: '7h 21m', avgSession: '28m', trend: 'up' },
-    { id: 'ludo', name: 'Ludo', icon: '🎯', color: '#4ade80', players: 2732, matches: 4102, sessions: 3800, playTimeHours: 1226, formattedPlayTime: '12h 16m', avgSession: '35m', trend: 'up' },
-    { id: 'snakes', name: 'Snakes & Ladders', icon: '🐍', color: '#facc15', players: 2100, matches: 2531, sessions: 2300, playTimeHours: 630, formattedPlayTime: '6h 18m', avgSession: '24m', trend: 'up' },
-    { id: 'backgammon', name: 'Backgammon', icon: '🎲', color: '#c084fc', players: 1800, matches: 2102, sessions: 1950, playTimeHours: 578, formattedPlayTime: '5h 47m', avgSession: '22m', trend: 'up' },
-    { id: 'speed', name: 'Speed Card', icon: '⚡', color: '#818cf8', players: 1500, matches: 1832, sessions: 1700, playTimeHours: 460, formattedPlayTime: '4h 36m', avgSession: '18m', trend: 'up' },
-    { id: 'darts', name: 'Darts Championship', icon: '🎯', color: '#2dd4bf', players: 1200, matches: 1421, sessions: 1350, playTimeHours: 390, formattedPlayTime: '3h 54m', avgSession: '16m', trend: 'same' },
-    { id: 'pingpong', name: 'Table Tennis', icon: '🏓', color: '#38bdf8', players: 1100, matches: 1203, sessions: 1150, playTimeHours: 335, formattedPlayTime: '3h 21m', avgSession: '14m', trend: 'same' },
-    { id: 'gomoku', name: 'Gomoku', icon: '⚫', color: '#94a3b8', players: 990, matches: 1021, sessions: 980, playTimeHours: 280, formattedPlayTime: '2h 48m', avgSession: '12m', trend: 'up' },
-    { id: 'reversi', name: 'Reversi', icon: '⚪', color: '#64748b', players: 842, matches: 910, sessions: 850, playTimeHours: 240, formattedPlayTime: '2h 20m', avgSession: '11m', trend: 'same' },
-    { id: 'connect4', name: 'Connect Four', icon: '🟡', color: '#06b6d4', players: 721, matches: 840, sessions: 790, playTimeHours: 195, formattedPlayTime: '1h 55m', avgSession: '10m', trend: 'up' },
-    { id: 'ultimatetictactoe', name: 'Ultimate Tic-Tac-Toe', icon: '❌', color: '#ef4444', players: 612, matches: 720, sessions: 670, playTimeHours: 160, formattedPlayTime: '1h 35m', avgSession: '9m', trend: 'same' },
-    { id: 'hearts', name: 'Hearts', icon: '♥', color: '#fb7185', players: 543, matches: 610, sessions: 580, playTimeHours: 145, formattedPlayTime: '1h 22m', avgSession: '15m', trend: 'up' },
-    { id: 'ginrummy', name: 'Gin Rummy', icon: '🎴', color: '#f59e0b', players: 421, matches: 490, sessions: 460, playTimeHours: 115, formattedPlayTime: '1h 05m', avgSession: '14m', trend: 'same' },
-    { id: 'duochess', name: 'Duo Chess', icon: '⚔️', color: '#a855f7', players: 368, matches: 450, sessions: 420, playTimeHours: 98, formattedPlayTime: '0h 58m', avgSession: '20m', trend: 'up' },
-  ];
+    return {
+      ...item,
+      timeAgo,
+    };
+  });
 
-  const liveMatches = [
-    { id: '#M-7842', game: 'Chess', icon: '♔', players: ['ADITYA-OWNER', 'AI (Grandmaster)'], matchType: 'User vs AI', started: 'Apr 28, 14:28', durationSeconds: 252, status: 'In Progress' },
-    { id: '#M-7839', game: 'Duo Chess', icon: '⚔️', players: ['GamingPro', 'ChessMaster'], matchType: 'Player vs Player', started: 'Apr 28, 14:26', durationSeconds: 405, status: 'In Progress' },
-    { id: '#M-7836', game: 'Ludo', icon: '🎯', players: ['LudoQueen', 'Guest_4920'], matchType: 'Pass & Play', started: 'Apr 28, 14:22', durationSeconds: 603, status: 'In Progress' },
-    { id: '#M-7831', game: 'Checkers', icon: '👑', players: ['CrownMaster', 'Riya_001'], matchType: 'Online Match', started: 'Apr 28, 14:18', durationSeconds: 867, status: 'In Progress' },
-    { id: '#M-7828', game: 'Snakes & Ladders', icon: '🐍', players: ['Arjun', 'DevKumar'], matchType: 'Pass & Play', started: 'Apr 28, 14:12', durationSeconds: 1276, status: 'In Progress' },
-    { id: '#M-7824', game: 'Backgammon', icon: '🎲', players: ['PipMaster', 'TacticsQueen'], matchType: 'Online Match', started: 'Apr 28, 14:08', durationSeconds: 1534, status: 'In Progress' },
-  ];
+  // Real 20 Games metrics
+  const gamesPlayed = ALL_GAMES_METADATA.map((meta) => {
+    const gameFinished = finishedGames.filter(
+      (g) => (g.gameType || 'chess').toLowerCase() === meta.id.toLowerCase()
+    );
+    let gameSessionsCount = gameFinished.length;
+    let gameTimeSec = 0;
+    const playerUsernames = new Set<string>();
+
+    for (const g of gameFinished) {
+      if (g.whiteUsername) playerUsernames.add(g.whiteUsername);
+      if (g.blackUsername) playerUsernames.add(g.blackUsername);
+      if (g.durationSeconds) gameTimeSec += g.durationSeconds;
+    }
+
+    for (const u of allUsers) {
+      const opened = u.perGameOpenedCount?.[meta.id] || 0;
+      const tSec = u.perGameTimeSeconds?.[meta.id] || 0;
+      if (opened > 0 || tSec > 0) {
+        playerUsernames.add(u.username);
+        gameSessionsCount += opened;
+        gameTimeSec += tSec;
+      }
+    }
+
+    const uniquePlayers = Math.max(playerUsernames.size, gameSessionsCount > 0 ? 1 : 0);
+    const playHours = Math.floor(gameTimeSec / 3600);
+    const playMins = Math.floor((gameTimeSec % 3600) / 60);
+    const formattedPlayTime = playHours > 0 ? `${playHours}h ${playMins}m` : `${playMins}m`;
+    const avgSec = gameSessionsCount > 0 ? Math.round(gameTimeSec / gameSessionsCount) : 0;
+    const avgSession = avgSec > 0 ? `${Math.floor(avgSec / 60)}m` : '-';
+
+    return {
+      id: meta.id,
+      name: meta.name,
+      icon: meta.icon,
+      color: meta.color,
+      players: uniquePlayers,
+      matches: gameFinished.length,
+      sessions: gameSessionsCount,
+      playTimeHours: playHours,
+      formattedPlayTime,
+      avgSession,
+      trend: gameSessionsCount > 0 ? 'up' : 'same',
+    };
+  });
+
+  // Sort games by activity descending
+  gamesPlayed.sort((a, b) => (b.sessions + b.matches * 2) - (a.sessions + a.matches * 2));
+
+  // Real Live Matches
+  const liveMatches = activeRooms.map((room) => {
+    const elapsed = Math.floor((now - (room.createdAt || room.lastTurnTime || now)) / 1000);
+    const meta = ALL_GAMES_METADATA.find((m) => m.id === room.gameType) || { name: 'Chess', icon: '♔' };
+    return {
+      id: `#${room.roomId}`,
+      game: meta.name,
+      icon: meta.icon,
+      players: [room.whiteUsername || 'Player 1', room.blackUsername || 'Waiting...'],
+      matchType: room.blackUsername ? 'Player vs Player' : 'Open Lobby Waiting',
+      started: new Date(room.createdAt || now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      durationSeconds: Math.max(0, elapsed),
+      status: room.blackUsername ? 'In Progress' : 'Waiting for Opponent',
+    };
+  });
+
+  // User insights
+  const sortedUsersByPlayTime = [...allUsers]
+    .sort((a, b) => {
+      const timeA = (a.accumulatedGameTimeSeconds || 0) + (a.gamesOpenedCount || 0) * 300;
+      const timeB = (b.accumulatedGameTimeSeconds || 0) + (b.gamesOpenedCount || 0) * 300;
+      return timeB - timeA;
+    })
+    .slice(0, 5);
+
+  const mostActiveUsers = sortedUsersByPlayTime.map((u) => {
+    const totalSec = (u.accumulatedGameTimeSeconds || 0) + (u.gamesOpenedCount || 0) * 300;
+    const hrs = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    return {
+      username: u.username,
+      avatar: u.username === 'ADITYA-OWNER' ? '👑' : u.isGuest ? '👤' : '🎮',
+      totalPlayTime: hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`,
+    };
+  });
+
+  const totalGameInteractions = gamesPlayed.reduce((acc, g) => acc + g.sessions, 0) || 1;
+  const mostCommonGames = gamesPlayed.slice(0, 5).map((g, idx) => ({
+    rank: idx + 1,
+    name: g.name,
+    percentage: Math.round((g.sessions / totalGameInteractions) * 1000) / 10,
+    color: g.color,
+  }));
 
   const userInsights = {
-    newUsersToday: { count: 2487, change: '+25.6%', compareText: 'vs. yesterday' },
-    returningUsersToday: { count: 3924, change: '+14.2%', compareText: 'vs. yesterday' },
-    mostActiveUsers: [
-      { username: 'GamingPro', avatar: '🎮', totalPlayTime: '12h 34m' },
-      { username: 'ChessMaster', avatar: '♟️', totalPlayTime: '10h 21m' },
-      { username: 'LudoQueen', avatar: '🎯', totalPlayTime: '9h 48m' },
-      { username: 'Riya_001', avatar: '🌸', totalPlayTime: '8h 16m' },
-      { username: 'DevKumar', avatar: '⚡', totalPlayTime: '7h 52m' },
-    ],
-    mostCommonGames: [
-      { rank: 1, name: 'Chess', percentage: 22.4, color: '#38bdf8' },
-      { rank: 2, name: 'Ludo', percentage: 14.2, color: '#4ade80' },
-      { rank: 3, name: 'Checkers', percentage: 10.6, color: '#f43f5e' },
-      { rank: 4, name: 'Carrom', percentage: 8.9, color: '#2dd4bf' },
-      { rank: 5, name: 'Snakes & Ladders', percentage: 7.3, color: '#facc15' },
-    ],
+    newUsersToday: { count: newUsersToday, change: `+${newUsersToday}`, compareText: 'registered today' },
+    returningUsersToday: { count: returningUsers, change: `+${returningUsers}`, compareText: 'returned today' },
+    mostActiveUsers,
+    mostCommonGames,
   };
 
-  res.json({
+  return {
     success: true,
     timestamp: new Date().toISOString(),
     range,
@@ -3889,7 +4187,14 @@ app.get('/api/admin/analytics', (req, res) => {
     gamesPlayed,
     liveMatches,
     userInsights,
-  });
+  };
+}
+
+// Admin Analytics Dashboard Telemetry Endpoint - 100% Real-Time
+app.get('/api/admin/analytics', (req, res) => {
+  const range = (req.query.range as string) || 'today';
+  const data = calculateRealAnalytics(range);
+  res.json(data);
 });
 
 // 2. User Lookup & Governance

@@ -32,8 +32,10 @@ import {
   Radio,
   CheckCircle2,
   Play,
-  Monitor
+  Monitor,
+  Lock
 } from 'lucide-react';
+import { socketService } from '../utils/socket';
 
 interface AdminAnalyticsDashboardProps {
   isOpen: boolean;
@@ -66,17 +68,30 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
 
   // Live ticking duration for active matches
-  const [matchSecondsMap, setMatchSecondsMap] = useState<Record<string, number>>({
-    '#M-7842': 252,
-    '#M-7839': 405,
-    '#M-7836': 603,
-    '#M-7831': 867,
-    '#M-7828': 1276,
-    '#M-7824': 1534,
-  });
+  const [matchSecondsMap, setMatchSecondsMap] = useState<Record<string, number>>({});
 
   // Telemetry state
   const [telemetry, setTelemetry] = useState<any>(null);
+
+  // Owner Authentication Verification Guard
+  useEffect(() => {
+    if (isOpen) {
+      const isVerified = sessionStorage.getItem('chess_owner_verified') === 'true';
+      if (!isVerified) {
+        onClose();
+        if ((window as any).openOwnerVerificationModal) {
+          (window as any).openOwnerVerificationModal('analytics');
+        }
+      }
+    }
+  }, [isOpen, onClose]);
+
+  const handleLockSession = () => {
+    sessionStorage.removeItem('chess_owner_verified');
+    sessionStorage.removeItem('chess_admin_token');
+    localStorage.removeItem('chess_owner_verified');
+    onClose();
+  };
 
   // Format live clock
   useEffect(() => {
@@ -96,6 +111,21 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
     return () => clearInterval(interval);
   }, []);
 
+  // Synchronize live matches duration ticker from real telemetry
+  useEffect(() => {
+    if (telemetry?.liveMatches && Array.isArray(telemetry.liveMatches)) {
+      setMatchSecondsMap((prev) => {
+        const next: Record<string, number> = { ...prev };
+        for (const m of telemetry.liveMatches) {
+          if (next[m.id] === undefined) {
+            next[m.id] = m.durationSeconds || 0;
+          }
+        }
+        return next;
+      });
+    }
+  }, [telemetry?.liveMatches]);
+
   // Tick match seconds
   useEffect(() => {
     const interval = setInterval(() => {
@@ -110,7 +140,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch telemetry data from backend
+  // Fetch real telemetry data from backend
   const fetchTelemetry = async (range: DateRange = dateRange) => {
     setIsRefreshing(true);
     try {
@@ -126,15 +156,59 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
     }
   };
 
+  // Live real-time socket updates & periodic fallback polling
   useEffect(() => {
-    if (isOpen) {
-      fetchTelemetry(dateRange);
-      // Periodic telemetry refresh every 20 seconds
-      const poll = setInterval(() => {
+    if (!isOpen) return;
+
+    fetchTelemetry(dateRange);
+
+    const socket = socketService.getSocket();
+    const handleLiveAnalytics = (data: any) => {
+      if (data?.kpis) {
+        setTelemetry(data);
+      } else {
         fetchTelemetry(dateRange);
-      }, 20000);
-      return () => clearInterval(poll);
+      }
+    };
+
+    const handleRealTimeActivity = (act: any) => {
+      if (!act) return;
+      setTelemetry((prev: any) => {
+        if (!prev) return prev;
+        const feed = prev.liveActivityFeed || [];
+        const filtered = feed.filter((a: any) => a.id !== act.id);
+        return {
+          ...prev,
+          liveActivityFeed: [act, ...filtered].slice(0, 50),
+        };
+      });
+    };
+
+    if (socket) {
+      socket.on('admin:analytics_update', handleLiveAnalytics);
+      socket.on('admin:activity', handleRealTimeActivity);
+      socket.on('match:created', () => fetchTelemetry(dateRange));
+      socket.on('match:ended', () => fetchTelemetry(dateRange));
+      socket.on('user:connected', () => fetchTelemetry(dateRange));
+      socket.on('user:disconnected', () => fetchTelemetry(dateRange));
     }
+
+    // Fast 5-second polling fallback for fresh live metrics
+    const poll = setInterval(() => {
+      fetchTelemetry(dateRange);
+    }, 5000);
+
+    return () => {
+      if (socket) {
+        socket.off('admin:analytics_update', handleLiveAnalytics);
+        socket.off('admin:activity', handleRealTimeActivity);
+        socket.off('match:created');
+        socket.off('match:ended');
+        socket.off('user:connected');
+        socket.off('user:disconnected');
+      }
+      clearInterval(poll);
+    };
   }, [isOpen, dateRange]);
 
   const formatDuration = (totalSeconds: number) => {
@@ -477,15 +551,35 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
                   <button
                     onClick={() => {
                       setIsAdminMenuOpen(false);
+                      handleLockSession();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-500/10 text-red-400 transition flex items-center gap-1.5"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Lock Owner Session</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsAdminMenuOpen(false);
                       onClose();
                     }}
-                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-500/10 text-red-400 transition"
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-400 transition"
                   >
                     Close Admin Console
                   </button>
                 </div>
               )}
             </div>
+
+            {/* Lock Session Button */}
+            <button
+              onClick={handleLockSession}
+              className="p-2 rounded-xl text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-900/50 border border-red-500/30 transition flex items-center gap-1.5 text-xs font-bold"
+              title="Lock owner authentication session"
+            >
+              <Lock className="w-4 h-4" />
+              <span className="hidden sm:inline">Lock Session</span>
+            </button>
 
             {/* Close / Return to Arena Button */}
             <button

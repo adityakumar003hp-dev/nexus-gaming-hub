@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Trophy, RefreshCw, UserCheck, Sparkles, Gift, Search, Award, CheckCircle2, ChevronRight, Zap } from 'lucide-react';
+import { X, Trophy, RefreshCw, UserCheck, Sparkles, Gift, Search, Award, CheckCircle2, ChevronRight, Zap, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ActiveBoardGame } from '../types';
 import { socketService } from '../utils/socket';
@@ -227,12 +227,52 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [rankFilter, setRankFilter] = useState<number | 'all'>('all');
   const [claimingRank, setClaimingRank] = useState<number | null>(null);
-  const [claimedRanks, setClaimedRanks] = useState<Record<string, boolean>>({});
+  const [claimedRanks, setClaimedRanks] = useState<Record<number, boolean>>({});
   const [claimSuccessMessage, setClaimSuccessMessage] = useState<string | null>(null);
+  const [claimErrorMessage, setClaimErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedGame(activeBoardGame);
   }, [activeBoardGame]);
+
+  // Load claimed ranks for current user
+  useEffect(() => {
+    if (isOpen) {
+      const userKey = currentUserHandle || 'ADITYA-OWNER';
+      // Local storage cache
+      try {
+        const cached = localStorage.getItem(`chess_claimed_ranks_${userKey.toLowerCase()}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            const map: Record<number, boolean> = {};
+            for (const r of parsed) map[Number(r)] = true;
+            setClaimedRanks(map);
+          }
+        }
+      } catch (e) {}
+
+      // Fetch official claimed ranks from server
+      fetch(`/api/leaderboard/claimed-rewards?userId=${encodeURIComponent(userKey)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.claimedRanks)) {
+            setClaimedRanks((prev) => {
+              const next = { ...prev };
+              for (const r of data.claimedRanks) next[Number(r)] = true;
+              try {
+                localStorage.setItem(
+                  `chess_claimed_ranks_${userKey.toLowerCase()}`,
+                  JSON.stringify(Object.keys(next).map(Number))
+                );
+              } catch (e) {}
+              return next;
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, currentUserHandle]);
 
   const fetchLeaderboard = (gameToFetch: ActiveBoardGame = selectedGame) => {
     fetch(`/api/leaderboard?game=${gameToFetch}&limit=150`)
@@ -285,11 +325,19 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
 
   const userRank = userRankEntry?.global_rank || (normalizedUserHandle === 'aditya-owner' ? 1 : null);
   const userPayout = userRank ? getLeaderboardPayout(userRank) : 0;
-  const isClaimed = userRank ? !!claimedRanks[`${selectedGame}_${userRank}`] : false;
+  const isClaimed = userRank ? !!claimedRanks[userRank] : false;
 
   const handleClaimReward = async (targetRank: number) => {
+    if (claimedRanks[targetRank]) {
+      setClaimErrorMessage(`Reward for Rank #${targetRank} has already been claimed! Each rank can only be claimed once.`);
+      return;
+    }
+
     setClaimingRank(targetRank);
     setClaimSuccessMessage(null);
+    setClaimErrorMessage(null);
+    const userKey = currentUserHandle || 'ADITYA-OWNER';
+
     try {
       const res = await fetch('/api/leaderboard/claim-reward', {
         method: 'POST',
@@ -297,35 +345,52 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
         body: JSON.stringify({
           gameType: selectedGame,
           rank: targetRank,
-          userId: currentUserHandle || 'ADITYA-OWNER',
+          userId: userKey,
         }),
       });
       const data = await res.json();
       if (data.success) {
         addPoints(data.payout, `Rank #${targetRank} Global Leaderboard Payout in ${GAME_NAMES[selectedGame]}`);
         addGems(data.payout, `Rank #${targetRank} Global Leaderboard Payout in ${GAME_NAMES[selectedGame]}`);
-        setClaimedRanks((prev) => ({ ...prev, [`${selectedGame}_${targetRank}`]: true }));
-        setClaimSuccessMessage(`Claimed ${data.payout.toLocaleString()} Coins & ${data.payout.toLocaleString()} Gems!`);
+        setClaimedRanks((prev) => {
+          const next = { ...prev, [targetRank]: true };
+          if (Array.isArray(data.claimedRanks)) {
+            for (const r of data.claimedRanks) next[Number(r)] = true;
+          }
+          try {
+            localStorage.setItem(
+              `chess_claimed_ranks_${userKey.toLowerCase()}`,
+              JSON.stringify(Object.keys(next).map(Number))
+            );
+          } catch (e) {}
+          return next;
+        });
+        setClaimSuccessMessage(`Successfully claimed ${data.payout.toLocaleString()} Coins & ${data.payout.toLocaleString()} Gems for Rank #${targetRank}!`);
         confetti({
           particleCount: 120,
           spread: 80,
           origin: { y: 0.6 }
         });
       } else {
-        throw new Error(data.error || 'Claim failed');
+        if (data.alreadyClaimed) {
+          setClaimedRanks((prev) => {
+            const next = { ...prev, [targetRank]: true };
+            if (Array.isArray(data.claimedRanks)) {
+              for (const r of data.claimedRanks) next[Number(r)] = true;
+            }
+            try {
+              localStorage.setItem(
+                `chess_claimed_ranks_${userKey.toLowerCase()}`,
+                JSON.stringify(Object.keys(next).map(Number))
+              );
+            } catch (e) {}
+            return next;
+          });
+        }
+        setClaimErrorMessage(data.error || 'Failed to claim reward. You may have already claimed this rank reward.');
       }
-    } catch (err) {
-      // Fallback claim
-      const fallbackPayout = getLeaderboardPayout(targetRank);
-      addPoints(fallbackPayout, `Rank #${targetRank} Global Leaderboard Payout in ${GAME_NAMES[selectedGame]}`);
-      addGems(fallbackPayout, `Rank #${targetRank} Global Leaderboard Payout in ${GAME_NAMES[selectedGame]}`);
-      setClaimedRanks((prev) => ({ ...prev, [`${selectedGame}_${targetRank}`]: true }));
-      setClaimSuccessMessage(`Claimed ${fallbackPayout.toLocaleString()} Coins & ${fallbackPayout.toLocaleString()} Gems!`);
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
+    } catch (err: any) {
+      setClaimErrorMessage(err?.message || 'Network error while attempting to claim reward.');
     } finally {
       setClaimingRank(null);
     }
@@ -551,6 +616,21 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             <div className="bg-emerald-950/40 border border-emerald-500/50 rounded-xl p-3 text-xs text-emerald-300 font-bold flex items-center gap-2 animate-fadeIn">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>{claimSuccessMessage} Wallet balances updated with Coins & Gems.</span>
+            </div>
+          )}
+
+          {claimErrorMessage && (
+            <div className="bg-rose-950/40 border border-rose-500/50 rounded-xl p-3 text-xs text-rose-300 font-bold flex items-center justify-between gap-2 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{claimErrorMessage}</span>
+              </div>
+              <button
+                onClick={() => setClaimErrorMessage(null)}
+                className="text-rose-400 hover:text-white px-2 py-0.5 rounded text-xs transition"
+              >
+                ✕
+              </button>
             </div>
           )}
 
@@ -840,14 +920,14 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                             {isCurrentUserRank ? (
                               <button
                                 onClick={() => handleClaimReward(entry.rank)}
-                                disabled={isClaimed || claimingRank === entry.rank}
+                                disabled={!!claimedRanks[entry.rank] || claimingRank === entry.rank}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition ${
-                                  isClaimed
-                                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
+                                  claimedRanks[entry.rank]
+                                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 cursor-default'
                                     : 'bg-amber-400 text-slate-950 hover:bg-amber-300 shadow-md shadow-amber-500/30'
                                 }`}
                               >
-                                {isClaimed ? 'Claimed' : claimingRank === entry.rank ? 'Claiming...' : 'Claim Payout'}
+                                {claimedRanks[entry.rank] ? 'Claimed' : claimingRank === entry.rank ? 'Claiming...' : 'Claim Payout'}
                               </button>
                             ) : (
                               <span className="text-gray-500 text-[11px]">

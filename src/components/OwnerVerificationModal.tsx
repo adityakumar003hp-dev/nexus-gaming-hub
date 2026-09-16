@@ -17,12 +17,14 @@ interface OwnerVerificationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  targetTitle?: string;
 }
 
 export const OwnerVerificationModal: React.FC<OwnerVerificationModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  targetTitle = 'Admin Console & Analytics',
 }) => {
   const [password, setPassword] = useState('');
   const [securityCode, setSecurityCode] = useState('');
@@ -64,7 +66,8 @@ export const OwnerVerificationModal: React.FC<OwnerVerificationModalProps> = ({
 
         if (!p || !c) {
           soundFx.playError();
-          setErrorMsg('Please enter both Password and Security Code.');
+          setErrorMsg('Please enter both Password and Secret Key / Owner Key.');
+          setIsLoading(false);
           return;
         }
 
@@ -92,7 +95,7 @@ export const OwnerVerificationModal: React.FC<OwnerVerificationModalProps> = ({
 
             if (!isDirectValid) {
               soundFx.playError();
-              setErrorMsg(data.error || '⛔ Verification Failed: Invalid Credentials');
+              setErrorMsg(data.error || '⛔ Verification Failed: Invalid Password or Secret Key.');
               setIsLoading(false);
               return;
             }
@@ -110,13 +113,13 @@ export const OwnerVerificationModal: React.FC<OwnerVerificationModalProps> = ({
           localStorage.setItem('chess_pro_user_username', 'ADITYA-OWNER');
 
           soundFx.playWin();
-          setSuccessMsg('👑 Welcome back, Site Owner ADITYA! Launching Admin Panel...');
+          setSuccessMsg('👑 Welcome, Site Owner ADITYA! Launching ' + targetTitle + '...');
 
           setTimeout(() => {
             setIsLoading(false);
             (window as any).OwnerAuthModal?.close();
             onSuccess();
-          }, 800);
+          }, 600);
         } catch (err) {
           // Direct check fallback in case of connection glitch
           const isDirectValid = 
@@ -133,17 +136,17 @@ export const OwnerVerificationModal: React.FC<OwnerVerificationModalProps> = ({
             localStorage.setItem('chess_pro_user_email', 'mukkuc41@gmail.com');
             localStorage.setItem('chess_pro_user_username', 'ADITYA-OWNER');
             soundFx.playWin();
-            setSuccessMsg('👑 Welcome back, Site Owner ADITYA! Launching Admin Panel...');
+            setSuccessMsg('👑 Welcome, Site Owner ADITYA! Launching ' + targetTitle + '...');
             setTimeout(() => {
               setIsLoading(false);
               (window as any).OwnerAuthModal?.close();
               onSuccess();
-            }, 800);
+            }, 600);
             return;
           }
 
           soundFx.playError();
-          setErrorMsg('⚠️ Backend server connection error.');
+          setErrorMsg('⛔ Access Denied: Invalid Password or Secret Key.');
           setIsLoading(false);
         }
       },
@@ -184,11 +187,14 @@ export const OwnerVerificationModal: React.FC<OwnerVerificationModalProps> = ({
 
         {/* Header */}
         <div className="admin-header flex items-center justify-between pb-3 border-b border-slate-800 relative z-10">
-          <div className="title-wrap flex items-center gap-2">
+          <div className="title-wrap flex flex-col gap-0.5">
             <h2 className="text-base font-black text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
               <span>👑</span>
-              <span>Owner Verification</span>
+              <span>Owner Authentication</span>
             </h2>
+            <p className="text-[11px] text-slate-400 font-mono">
+              Enter password &amp; secret key to enter {targetTitle}
+            </p>
           </div>
           <button
             onClick={() => {
@@ -220,7 +226,7 @@ export const OwnerVerificationModal: React.FC<OwnerVerificationModalProps> = ({
         )}
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="auth-body relative z-10">
+        <form onSubmit={handleSubmit} className="auth-body relative z-10 mt-3">
           <div className="input-group flex flex-col gap-1.5">
             <label className="text-[11px] font-black uppercase text-slate-300 tracking-wider font-mono flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5 text-amber-400" />
@@ -248,17 +254,17 @@ export const OwnerVerificationModal: React.FC<OwnerVerificationModalProps> = ({
             </div>
           </div>
 
-          <div className="input-group flex flex-col gap-1.5">
+          <div className="input-group flex flex-col gap-1.5 mt-3">
             <label className="text-[11px] font-black uppercase text-slate-300 tracking-wider font-mono flex items-center gap-1.5">
               <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-              <span>Security Code</span>
+              <span>Secret Key / Owner Key</span>
             </label>
             <div className="relative">
               <input
                 type={showCode ? 'text' : 'password'}
                 id="authOwnerCode"
                 value={securityCode}
-                placeholder="Enter 14-digit code..."
+                placeholder="Enter 14-digit owner key..."
                 onChange={(e) => setSecurityCode(e.target.value)}
                 disabled={isLoading}
                 className="w-full bg-[#0a0d18] border border-slate-700/90 focus:border-pink-500 rounded-xl px-3.5 py-2.5 pr-10 text-xs text-amber-300 placeholder-slate-500 outline-none transition font-mono tracking-widest shadow-inner"
@@ -277,13 +283,13 @@ export const OwnerVerificationModal: React.FC<OwnerVerificationModalProps> = ({
           <button
             type="submit"
             disabled={isLoading}
-            className="adm-btn primary full-width py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:from-pink-400 hover:to-amber-400 text-white font-mono transition shadow-[0_0_20px_rgba(236,72,153,0.35)] cursor-pointer active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="adm-btn primary full-width mt-4 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:from-pink-400 hover:to-amber-400 text-white font-mono transition shadow-[0_0_20px_rgba(236,72,153,0.35)] cursor-pointer active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isLoading ? (
               <span>Verifying...</span>
             ) : (
               <>
-                <span>Verify &amp; Enter Panel</span>
+                <span>Authenticate &amp; Enter</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
